@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const TRUELAYER_BALANCE_URL = "https://api.truelayer.com/api/v1/balance";
 
@@ -44,6 +45,9 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const entitlementError = await requireModule(supabase, "open_banking", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { connectionId } = await req.json() as BalanceRequest;

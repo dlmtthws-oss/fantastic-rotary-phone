@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireModule } from '../_shared/entitlements.ts'
 
 const HMRC_SANDBOX_BASE_URL = 'https://test-api.service.hmrc.gov.uk'
 const HMRC_LIVE_BASE_URL = 'https://api.service.hmrc.gov.uk'
@@ -43,6 +44,11 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json' }
       })
     }
+
+    const supabase = getSupabase()
+
+    const entitlementError = await requireModule(supabase, 'vat_mtd', {})
+    if (entitlementError) return entitlementError
 
     // Calculate derived boxes
     const box3 = (box1 || 0) + (box2 || 0)
@@ -94,8 +100,6 @@ Deno.serve(async (req) => {
     }
 
     const result = await response.json()
-
-    const supabase = getSupabase()
 
     // Update local record
     await supabase

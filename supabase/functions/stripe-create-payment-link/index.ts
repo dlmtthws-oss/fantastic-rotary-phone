@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 const CORSHeaders = {
@@ -19,6 +20,9 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const entitlementError = await requireModule(supabase, "stripe", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { invoiceId } = await req.json() as CreatePaymentLinkRequest;

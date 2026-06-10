@@ -1,9 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const COMPANIES_HOUSE_API = "https://api.company-information.service.gov.uk";
 const CORSHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const createSupabaseClient = (req: Request) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = req.headers.get("apikey") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(supabaseUrl, supabaseKey, { global: { headers: { apikey: supabaseKey } } });
 };
 
 const cache = new Map<string, { data: unknown; expiry: number }>();
@@ -17,6 +25,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORSHeaders });
   }
+
+  const supabase = createSupabaseClient(req);
+
+  const entitlementError = await requireModule(supabase, "companies_house", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { query } = await req.json() as SearchRequest;

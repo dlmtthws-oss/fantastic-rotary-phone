@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const XERO_API_URL = "https://api.xero.com/api.xro/2.0";
 
@@ -48,6 +49,9 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const entitlementError = await requireModule(supabase, "xero", CORSHeaders);
+    if (entitlementError) return entitlementError;
 
     const { data: connection, error: fetchError } = await supabase
       .from("xero_connections")

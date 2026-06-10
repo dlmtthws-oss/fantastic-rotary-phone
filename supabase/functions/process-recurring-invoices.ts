@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { requireModule } from './_shared/entitlements.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,6 +96,9 @@ serve(async (req) => {
 
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+  const entitlementError = await requireModule(supabase, 'recurring_invoices', corsHeaders)
+  if (entitlementError) return entitlementError
 
   const today = new Date().toISOString().split('T')[0]
   

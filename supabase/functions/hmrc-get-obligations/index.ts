@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireModule } from '../_shared/entitlements.ts'
 
 const HMRC_SANDBOX_BASE_URL = 'https://test-api.service.hmrc.gov.uk'
 const HMRC_LIVE_BASE_URL = 'https://api.service.hmrc.gov.uk'
@@ -44,6 +45,11 @@ Deno.serve(async (req) => {
       })
     }
 
+    const supabase = getSupabase()
+
+    const entitlementError = await requireModule(supabase, 'vat_mtd', {})
+    if (entitlementError) return entitlementError
+
     const obligationsUrl = `${BASE_URL}/organisations/vat/${vrn}/obligations`
     
     const fromDate = new Date()
@@ -79,8 +85,6 @@ Deno.serve(async (req) => {
 
     const data = await response.json()
     const obligations = data.obligations || []
-
-    const supabase = getSupabase()
 
     for (const obs of obligations) {
       const { error: upsertError } = await supabase

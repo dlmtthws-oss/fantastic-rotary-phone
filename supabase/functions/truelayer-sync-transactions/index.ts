@@ -97,7 +97,7 @@ async function autoMatchDebitToExpense(supabase, transaction: TrueLayerTransacti
     .lte("expense_date", threeDaysFuture.toISOString().split("T")[0])
     .is("matched_expense_id", null);
 
-  const matches = expenses?.filter((exp) => Math.abs(Number(exp.amount) === Math.abs(transaction.amount));
+  const matches = expenses?.filter((exp) => Math.abs(Number(exp.amount) - Math.abs(transaction.amount)) <= 0.01);
 
   if (!matches || matches.length === 0) return null;
   return {

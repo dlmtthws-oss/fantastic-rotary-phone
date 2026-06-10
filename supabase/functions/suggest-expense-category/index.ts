@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -192,6 +193,9 @@ serve(async (req) => {
   }
 
   const supabase = createSupabaseClient(req);
+
+  const entitlementError = await requireModule(supabase, "expense_ai", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { description, supplier, amount, vatAmount, userId } = await req.json() as SuggestRequest;

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireModule } from '../_shared/entitlements.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,6 +65,10 @@ export default async function handler(req: Request) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const entitlementError = await requireModule(supabase, "fraud_detection", corsHeaders)
+    if (entitlementError) return entitlementError
+
     const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
 
     const body = await req.json()

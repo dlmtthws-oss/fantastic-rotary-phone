@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -210,6 +211,9 @@ serve(async (req) => {
       { status: 401, headers: { ...CORSHeaders, "Content-Type": "application/json" } }
     );
   }
+
+  const entitlementError = await requireModule(supabase, "auto_comms", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { customerId, communicationType, triggerData, channel = "email" } = await req.json() as GenerateRequest;

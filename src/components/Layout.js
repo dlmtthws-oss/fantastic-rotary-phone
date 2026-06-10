@@ -5,35 +5,36 @@ import NotificationPanel, { useNotificationCount } from './NotificationPanel'
 import InstallPrompt from './InstallPrompt'
 import AIAssistant from './AIAssistant.js'
 import { supabase } from '../lib/supabase'
+import { useEntitlements } from '../context/EntitlementsContext'
 
 const adminLinks = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/customers', label: 'Customers', icon: '👥', subItems: [
-    { to: '/customers/health', label: 'Customer Health', adminOnly: true }
+    { to: '/customers/health', label: 'Customer Health', adminOnly: true, module: 'churn_prediction' }
   ] },
-  { to: '/quotes', label: 'Quotes', icon: '💼' },
+  { to: '/quotes', label: 'Quotes', icon: '💼', module: 'quotes' },
   { to: '/jobs', label: 'Jobs', icon: '🧹' },
   { to: '/routes', label: 'Routes', icon: '🗺️' },
-  { to: '/scheduling', label: 'Smart Scheduling', icon: '✨', adminOnly: true },
+  { to: '/scheduling', label: 'Smart Scheduling', icon: '✨', adminOnly: true, module: 'smart_scheduling_ai' },
   { to: '/invoices', label: 'Invoices', icon: '📄' },
-  { to: '/accounting/bank-feed', label: 'Bank Feed', icon: '🏦' },
+  { to: '/accounting/bank-feed', label: 'Bank Feed', icon: '🏦', module: 'open_banking' },
   { to: '/expenses', label: 'Expenses', icon: '💰' },
-  { to: '/communications', label: 'Communications', icon: '📧', adminOnly: true },
+  { to: '/communications', label: 'Communications', icon: '📧', adminOnly: true, module: 'auto_comms' },
   { to: '/reports', label: 'Reports', icon: '📈', subItems: [
     { to: '/reports', label: 'Overview' },
-    { to: '/reports/vat', label: 'VAT Return', adminOnly: true },
-    { to: '/reports/cash-flow', label: 'Cash Flow', adminOnly: true },
-    { to: '/reports/insights', label: 'Insights', adminOnly: true },
-    { to: '/reports/anomalies', label: 'Anomalies', adminOnly: true }
+    { to: '/reports/vat', label: 'VAT Return', adminOnly: true, module: 'vat_mtd' },
+    { to: '/reports/cash-flow', label: 'Cash Flow', adminOnly: true, module: 'cashflow_forecast' },
+    { to: '/reports/insights', label: 'Insights', adminOnly: true, module: 'insights_copilot' },
+    { to: '/reports/anomalies', label: 'Anomalies', adminOnly: true, module: 'anomaly_detection' }
   ]},
   { to: '/settings', label: 'Settings', icon: '⚙️', subItems: [
     { to: '/settings', label: 'General' },
-    { to: '/settings/audit-log', label: 'Audit Log', adminOnly: true }
+    { to: '/settings/audit-log', label: 'Audit Log', adminOnly: true, module: 'audit_log' }
   ]},
 ];
 
 const workerLinks = [
-  { to: '/my-routes', label: 'My Routes', icon: '🗺️' },
+  { to: '/my-routes', label: 'My Routes', icon: '🗺️', module: 'field_worker' },
   { to: '/jobs', label: 'Jobs', icon: '🧹' }
 ]
 
@@ -41,10 +42,13 @@ export default function Layout({ user, children, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
   const navigate = useNavigate()
-  
+  const { isEntitled } = useEntitlements()
+
   const isWorker = user?.role === 'worker'
   const canSearch = !isWorker // Only admin/manager can use global search
-  const links = isWorker ? workerLinks : adminLinks
+  const links = (isWorker ? workerLinks : adminLinks).filter(
+    link => !link.module || isEntitled(link.module)
+  )
 
   // Keyboard shortcut (Ctrl+K or Cmd+K)
   useEffect(() => {
@@ -132,7 +136,7 @@ export default function Layout({ user, children, onLogout }) {
                       {sidebarOpen && <span>{label}</span>}
                     </NavLink>
                     {sidebarOpen && subItems.map(sub => (
-                      sub.adminOnly && user?.role !== 'admin' ? null : (
+                      (sub.adminOnly && user?.role !== 'admin') || (sub.module && !isEntitled(sub.module)) ? null : (
                         <NavLink
                           key={sub.to}
                           to={sub.to}

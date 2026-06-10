@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -7,6 +8,12 @@ const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 const CORSHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const createSupabaseClient = (req: Request) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = req.headers.get("apikey") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(supabaseUrl, supabaseKey, { global: { headers: { apikey: supabaseKey } } });
 };
 
 interface ScanReceiptRequest {
@@ -165,6 +172,11 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORSHeaders });
   }
+
+  const supabase = createSupabaseClient(req);
+
+  const entitlementError = await requireModule(supabase, "receipt_ocr", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { image_base64, image_type } = await req.json() as ScanReceiptRequest;

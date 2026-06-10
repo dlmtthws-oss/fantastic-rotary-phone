@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireModule } from '../_shared/entitlements.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -424,6 +425,9 @@ export default async function handler(req: Request) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const entitlementError = await requireModule(supabase, 'route_optimisation', corsHeaders)
+    if (entitlementError) return entitlementError
 
     const googleApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || ''
     const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY') || ''

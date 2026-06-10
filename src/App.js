@@ -5,6 +5,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import OfflineBanner from './components/OfflineBanner';
 import { SkeletonTable } from './components/SkeletonComponents';
+import { EntitlementsProvider } from './context/EntitlementsContext';
+import RequireModule from './components/RequireModule';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Customers = lazy(() => import('./pages/Customers'));
@@ -45,6 +47,8 @@ const BusinessInsights = lazy(() => import('./pages/BusinessInsights'));
 const AnomalyManagement = lazy(() => import('./pages/AnomalyManagement'));
 const Legal = lazy(() => import('./pages/Legal'));
 const Privacy = lazy(() => import('./pages/Privacy'));
+const Upgrade = lazy(() => import('./pages/Upgrade'));
+const PlanAndModules = lazy(() => import('./pages/PlanAndModules'));
 
 function PageLoading() {
   return (
@@ -140,50 +144,54 @@ function App() {
   return (
     <ErrorBoundary user={user}>
       <OfflineBanner />
-      <Router>
-        <Layout user={user} onLogout={handleLogout}>
-          <Suspense fallback={<PageLoading />}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/onboarding" element={<OnboardingWizard user={user} onComplete={() => setShowOnboarding(false)} />} />
-              <Route path="/invitation/:token" element={<InvitationAccept />} />
-              <Route path="/customers" element={<Customers />} />
-              <Route path="/customers/import" element={<CustomerImportPage />} />
-              <Route path="/customers/import/history" element={<ImportHistoryPage />} />
-              <Route path="/quotes" element={<Quotes user={user} />} />
-              <Route path="/quotes/new" element={<QuoteBuilder user={user} />} />
-              <Route path="/quotes/:id" element={<QuoteDetail user={user} />} />
-              <Route path="/quotes/:id/edit" element={<QuoteBuilder user={user} />} />
-              <Route path="/jobs" element={<Jobs user={user} />} />
-              <Route path="/routes" element={<RoutesPage user={user} />} />
-              <Route path="/my-routes" element={<MyRoutes user={user} />} />
-              <Route path="/my-routes/:routeId/execute" element={<RouteExecution />} />
-              <Route path="/invoices" element={<Invoices user={user} />} />
-              <Route path="/invoices/recurring" element={<RecurringInvoices user={user} />} />
-              <Route path="/portal/:token" element={<Portal />} />
-              <Route path="/expenses" element={<Expenses user={user} />} />
-              <Route path="/reports" element={<Reports user={user} />} />
-              <Route path="/reports/vat" element={<VATReturnReport user={user} />} />
-              <Route path="/scheduling" element={<SmartScheduling user={user} />} />
-              <Route path="/cashflow" element={<CashFlowForecast user={user} />} />
-              <Route path="/communications" element={<CommunicationsCentre user={user} />} />
-              <Route path="/legal" element={<Legal />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/customers/health" element={<CustomerHealth user={user} />} />
-              <Route path="/workers" element={<Workers />} />
-              <Route path="/settings" element={<Settings user={user} />} />
-              <Route path="/invite" element={<InviteUsers user={user} />} />
-              <Route path="/settings/audit-log" element={<AuditLog />} />
-              <Route path="/settings/quickbooks-callback" element={<QuickBooksCallback />} />
-              <Route path="/accounting/bank-feed" element={<BankFeed />} />
-<Route path="/reports/anomalies/dashboard" element={<RiskDashboard />} />
-              <Route path="/reports/anomalies/invoices" element={<AnomalyManagement user={user} />} />
-              <Route path="/routes/:id/performance" element={<RoutePerformance />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </Layout>
-      </Router>
+      <EntitlementsProvider>
+        <Router>
+          <Layout user={user} onLogout={handleLogout}>
+            <Suspense fallback={<PageLoading />}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/onboarding" element={<OnboardingWizard user={user} onComplete={() => setShowOnboarding(false)} />} />
+                <Route path="/invitation/:token" element={<InvitationAccept />} />
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/customers/import" element={<RequireModule module="csv_import"><CustomerImportPage /></RequireModule>} />
+                <Route path="/customers/import/history" element={<RequireModule module="csv_import"><ImportHistoryPage /></RequireModule>} />
+                <Route path="/quotes" element={<RequireModule module="quotes"><Quotes user={user} /></RequireModule>} />
+                <Route path="/quotes/new" element={<RequireModule module="quotes"><QuoteBuilder user={user} /></RequireModule>} />
+                <Route path="/quotes/:id" element={<RequireModule module="quotes"><QuoteDetail user={user} /></RequireModule>} />
+                <Route path="/quotes/:id/edit" element={<RequireModule module="quotes"><QuoteBuilder user={user} /></RequireModule>} />
+                <Route path="/jobs" element={<Jobs user={user} />} />
+                <Route path="/routes" element={<RoutesPage user={user} />} />
+                <Route path="/my-routes" element={<RequireModule module="field_worker"><MyRoutes user={user} /></RequireModule>} />
+                <Route path="/my-routes/:routeId/execute" element={<RequireModule module="field_worker"><RouteExecution /></RequireModule>} />
+                <Route path="/invoices" element={<Invoices user={user} />} />
+                <Route path="/invoices/recurring" element={<RequireModule module="recurring_invoices"><RecurringInvoices user={user} /></RequireModule>} />
+                <Route path="/portal/:token" element={<Portal />} />
+                <Route path="/expenses" element={<Expenses user={user} />} />
+                <Route path="/reports" element={<Reports user={user} />} />
+                <Route path="/reports/vat" element={<RequireModule module="vat_mtd"><VATReturnReport user={user} /></RequireModule>} />
+                <Route path="/scheduling" element={<RequireModule module="smart_scheduling_ai"><SmartScheduling user={user} /></RequireModule>} />
+                <Route path="/cashflow" element={<RequireModule module="cashflow_forecast"><CashFlowForecast user={user} /></RequireModule>} />
+                <Route path="/communications" element={<RequireModule module="auto_comms"><CommunicationsCentre user={user} /></RequireModule>} />
+                <Route path="/legal" element={<Legal />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/customers/health" element={<RequireModule module="churn_prediction"><CustomerHealth user={user} /></RequireModule>} />
+                <Route path="/workers" element={<RequireModule module="multi_user"><Workers /></RequireModule>} />
+                <Route path="/settings" element={<Settings user={user} />} />
+                <Route path="/settings/plan" element={<PlanAndModules />} />
+                <Route path="/invite" element={<RequireModule module="multi_user"><InviteUsers user={user} /></RequireModule>} />
+                <Route path="/settings/audit-log" element={<RequireModule module="audit_log"><AuditLog /></RequireModule>} />
+                <Route path="/settings/quickbooks-callback" element={<RequireModule module="quickbooks"><QuickBooksCallback /></RequireModule>} />
+                <Route path="/accounting/bank-feed" element={<RequireModule module="open_banking"><BankFeed /></RequireModule>} />
+                <Route path="/reports/anomalies/dashboard" element={<RequireModule module="anomaly_detection"><RiskDashboard /></RequireModule>} />
+                <Route path="/reports/anomalies/invoices" element={<RequireModule module="anomaly_detection"><AnomalyManagement user={user} /></RequireModule>} />
+                <Route path="/routes/:id/performance" element={<RequireModule module="route_optimisation"><RoutePerformance /></RequireModule>} />
+                <Route path="/upgrade/:moduleKey" element={<Upgrade />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </Layout>
+        </Router>
+      </EntitlementsProvider>
     </ErrorBoundary>
   );
 }

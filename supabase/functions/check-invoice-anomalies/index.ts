@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CORSHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -177,6 +178,9 @@ serve(async (req) => {
   const supabase = createSupabaseClient(req);
 
   try {
+    const entitlementError = await requireModule(supabase, "anomaly_detection", CORSHeaders);
+    if (entitlementError) return entitlementError;
+
     const { invoice_id, run_all } = await req.json();
 
     if (!invoice_id && !run_all) {

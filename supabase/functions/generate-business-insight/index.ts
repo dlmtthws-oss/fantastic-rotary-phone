@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -235,6 +236,9 @@ serve(async (req) => {
   if (!userId) {
     return new Response(JSON.stringify({ error: "Authentication required" }), { status: 401, headers: { ...CORSHeaders, "Content-Type": "application/json" } });
   }
+
+  const entitlementError = await requireModule(supabase, "insights_copilot", CORSHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { insight_type, period_start, period_end, query } = await req.json();

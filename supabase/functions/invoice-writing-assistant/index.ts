@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { requireModule } from '../_shared/entitlements.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -181,6 +182,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabase = createSupabaseClient(req);
+
+  const entitlementError = await requireModule(supabase, "invoice_writer", corsHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { action, customer_id, route_id, job_execution_ids, invoice_id, service_description } = await req.json();

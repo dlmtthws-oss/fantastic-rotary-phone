@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireModule } from "../_shared/entitlements.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -187,6 +188,9 @@ serve(async (req) => {
   if (!userId) {
     return new Response(JSON.stringify({ error: "Authentication required" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
+
+  const entitlementError = await requireModule(supabase, "smart_onboarding_ai", corsHeaders);
+  if (entitlementError) return entitlementError;
 
   try {
     const { data: customers } = await supabase.from("customers").select("id, name, postcode").eq("profiles_id", userId);

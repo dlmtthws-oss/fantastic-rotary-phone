@@ -1,12 +1,137 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useEntitlements } from '../context/EntitlementsContext'
 import { MODULES, PLANS, TIER_ORDER } from '../config/modules'
+import { supabase } from '../lib/supabase'
 
 const TIER_LABELS = {
   solo: 'Solo',
   team: 'Team',
   business: 'Business',
   ai: 'AI',
+}
+
+// Mirrors PLAN_AI_REQUEST_LIMITS in supabase/functions/_shared/ai.ts
+const PLAN_AI_REQUEST_LIMITS = { ai: 500 }
+
+function AiUsageCard({ plan }) {
+  const [settings, setSettings] = useState(null)
+  const [usedThisMonth, setUsedThisMonth] = useState(0)
+  const [keyInput, setKeyInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    const load = async () => {
+      const monthStart = new Date()
+      monthStart.setUTCDate(1)
+      monthStart.setUTCHours(0, 0, 0, 0)
+
+      const [{ data: cs }, { count }] = await Promise.all([
+        supabase
+          .from('company_settings')
+          .select('id, anthropic_api_key, ai_monthly_request_limit')
+          .limit(1)
+          .single(),
+        supabase
+          .from('ai_usage_log')
+          .select('id', { count: 'exact', head: true })
+          .eq('key_source', 'platform')
+          .gte('created_at', monthStart.toISOString()),
+      ])
+      setSettings(cs)
+      setUsedThisMonth(count || 0)
+    }
+    load()
+  }, [])
+
+  if (!settings) return null
+
+  const hasOwnKey = Boolean(settings.anthropic_api_key)
+  const limit = settings.ai_monthly_request_limit ?? PLAN_AI_REQUEST_LIMITS[plan] ?? 0
+
+  const saveKey = async (value) => {
+    setSaving(true)
+    setMessage(null)
+    const { error } = await supabase
+      .from('company_settings')
+      .update({ anthropic_api_key: value })
+      .eq('id', settings.id)
+    setSaving(false)
+    if (error) {
+      setMessage({ type: 'error', text: 'Failed to save API key. Please try again.' })
+    } else {
+      setSettings({ ...settings, anthropic_api_key: value })
+      setKeyInput('')
+      setMessage({
+        type: 'success',
+        text: value ? 'API key saved. AI features now use your own Anthropic account.' : 'API key removed.',
+      })
+    }
+  }
+
+  return (
+    <div className="p-6 bg-white rounded-lg shadow mb-6">
+      <h3 className="font-semibold mb-1">AI usage & API key</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        AI features run on your own Anthropic API key if you add one. Otherwise they use the
+        included monthly allowance on the AI plan.
+      </p>
+
+      <div className="flex items-center gap-6 mb-4">
+        <div>
+          <p className="text-sm text-gray-500">This month (included allowance)</p>
+          <p className="text-lg font-semibold">
+            {usedThisMonth} / {limit} requests
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Billing source</p>
+          <p className="text-lg font-semibold">{hasOwnKey ? 'Your Anthropic account' : 'Included allowance'}</p>
+        </div>
+      </div>
+
+      {hasOwnKey ? (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-gray-600">
+            Using your API key ending in{' '}
+            <span className="font-mono">…{settings.anthropic_api_key.slice(-4)}</span>. Requests are
+            unmetered and billed to your Anthropic account.
+          </p>
+          <button
+            onClick={() => saveKey(null)}
+            disabled={saving}
+            className="text-sm text-red-600 hover:underline whitespace-nowrap disabled:opacity-50"
+          >
+            Remove key
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <input
+            type="password"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="sk-ant-..."
+            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => saveKey(keyInput.trim())}
+            disabled={saving || !keyInput.trim().startsWith('sk-ant-')}
+            className="px-4 py-2 bg-gray-900 text-white text-sm rounded disabled:opacity-50 whitespace-nowrap"
+          >
+            {saving ? 'Saving…' : 'Use my key'}
+          </button>
+        </div>
+      )}
+
+      {message && (
+        <p className={`text-sm mt-3 ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export default function PlanAndModules() {
@@ -36,6 +161,8 @@ export default function PlanAndModules() {
           </span>
         )}
       </div>
+
+      {modules.has('ai_copilot') && <AiUsageCard plan={plan} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {TIER_ORDER.map((tier) => (

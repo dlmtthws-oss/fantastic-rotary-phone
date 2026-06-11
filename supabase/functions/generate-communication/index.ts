@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -163,9 +164,8 @@ const generatePrompt = (type: string, data: Record<string, unknown>, channel: st
   return prompt;
 };
 
-const callClaude = async (prompt: string) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) {
+const callClaude = async (prompt: string, supabase: ReturnType<typeof createSupabaseClient>, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>) => {
+  if (!aiCreds || aiCreds instanceof Response) {
     return { subject: null, body: "Communication service unavailable" };
   }
 
@@ -174,7 +174,7 @@ const callClaude = async (prompt: string) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -190,6 +190,7 @@ const callClaude = async (prompt: string) => {
     }
 
     const data = await response.json();
+    await recordAiUsage(supabase, "generate-communication", CLAUDE_MODEL, aiCreds.source, data.usage);
     const text = data.content?.[0]?.text || "{}";
     return JSON.parse(text);
   } catch {
@@ -214,6 +215,9 @@ serve(async (req) => {
 
   const entitlementError = await requireModule(supabase, "auto_comms", CORSHeaders);
   if (entitlementError) return entitlementError;
+
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
 
   try {
     const { customerId, communicationType, triggerData, channel = "email" } = await req.json() as GenerateRequest;
@@ -270,7 +274,7 @@ serve(async (req) => {
     };
 
     const prompt = generatePrompt(communicationType, mergeData, channel);
-    const generated = await callClaude(prompt);
+    const generated = await callClaude(prompt, supabase, aiCreds);
 
     if (!generated.body) {
       return new Response(

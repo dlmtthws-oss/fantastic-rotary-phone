@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -108,9 +109,8 @@ const checkHistoricalMatch = async (supabase: ReturnType<typeof createSupabaseCl
   return null;
 };
 
-const callClaude = async (supplier?: string, description?: string, amount?: number, vatAmount?: number) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) {
+const callClaude = async (supabase: ReturnType<typeof createSupabaseClient>, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>, supplier?: string, description?: string, amount?: number, vatAmount?: number) => {
+  if (!aiCreds || aiCreds instanceof Response) {
     return {
       category: "other",
       vatReclaimable: false,
@@ -153,7 +153,7 @@ Respond only with JSON:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -174,6 +174,7 @@ Respond only with JSON:
     }
 
     const data = await response.json();
+    await recordAiUsage(supabase, "suggest-expense-category", CLAUDE_MODEL, aiCreds.source, data.usage);
     const text = data.content?.[0]?.text || "{}";
     return JSON.parse(text);
   } catch {
@@ -214,8 +215,11 @@ serve(async (req) => {
     }
 
     if (!result || result.confidence < 0.85) {
-      const aiResult = await callClaude(supplier, description, amount, vatAmount);
-      
+      const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+      if (aiCreds instanceof Response) return aiCreds;
+
+      const aiResult = await callClaude(supabase, aiCreds, supplier, description, amount, vatAmount);
+
       result = {
         category: aiResult.category,
         vatReclaimable: aiResult.vat_reclaimable,

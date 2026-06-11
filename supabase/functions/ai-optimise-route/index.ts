@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireModule } from '../_shared/entitlements.ts'
+import { getAiCredentials, recordAiUsage, type AiCredentials } from '../_shared/ai.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -117,7 +118,8 @@ async function getGoogleDistanceMatrix(
 
 async function callClaude(
   request: ClaudeRequest,
-  claudeApiKey: string
+  supabase: any,
+  aiCreds: AiCredentials
 ): Promise<ClaudeResponse> {
   const prompt = `You are a route optimisation expert for a window cleaning business. Analyse the route and suggest an optimal stop order that minimises total time.
 
@@ -175,7 +177,7 @@ Respond with JSON only (no other text):
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': claudeApiKey,
+      'x-api-key': aiCreds.key,
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
@@ -187,6 +189,7 @@ Respond with JSON only (no other text):
   })
 
   const data = await response.json() as any
+  await recordAiUsage(supabase, 'ai-optimise-route', 'claude-3-sonnet-20240229', aiCreds.source, data.usage)
   const content = data.content?.[0]?.text || ''
   
   try {
@@ -313,9 +316,10 @@ async function phase3ClaudeAnalysis(
   phase1Data: Phase1Result,
   distances: DistanceMatrixResult[],
   optimisationType: string,
-  claudeApiKey: string
+  supabase: any,
+  aiCreds: AiCredentials | null
 ): Promise<ClaudeResponse> {
-  if (!claudeApiKey || claudeApiKey.length < 10) {
+  if (!aiCreds) {
     return {
       suggested_order: phase1Data.stops.map(s => s.id),
       reasoning: 'No Claude API key configured',
@@ -343,7 +347,7 @@ async function phase3ClaudeAnalysis(
     optimisationType
   }
 
-  return await callClaude(request, claudeApiKey)
+  return await callClaude(request, supabase, aiCreds)
 }
 
 async function phase4StoreResult(
@@ -429,8 +433,10 @@ export default async function handler(req: Request) {
     const entitlementError = await requireModule(supabase, 'route_optimisation', corsHeaders)
     if (entitlementError) return entitlementError
 
+    const aiCreds = await getAiCredentials(supabase, corsHeaders)
+    if (aiCreds instanceof Response) return aiCreds
+
     const googleApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || ''
-    const claudeApiKey = Deno.env.get('ANTHROPIC_API_KEY') || ''
 
     const body = await req.json()
     const { route_id, optimisation_type = 'ai_enhanced' } = body
@@ -462,7 +468,8 @@ export default async function handler(req: Request) {
       phase1Data,
       distances,
       optimisation_type,
-      claudeApiKey
+      supabase,
+      aiCreds
     )
 
     const suggestedOrder = claudeResult.suggested_order.filter((id: string) => 

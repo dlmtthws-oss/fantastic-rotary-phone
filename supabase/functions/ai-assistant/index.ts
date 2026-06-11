@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -110,17 +111,12 @@ const createSupabaseClient = (req: Request) => {
   return createClient(supabaseUrl, supabaseKey, { global: { headers: { apikey: supabaseKey } } });
 };
 
-const callClaude = async (messages: { role: string; content: string }[], tools: unknown[], startTime: number) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) {
-    return { error: "Claude API key not configured" };
-  }
-
+const callClaude = async (messages: { role: string; content: string }[], tools: unknown[], startTime: number, apiKey: string) => {
   const response = await fetch(CLAUDE_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": claudeKey,
+      "x-api-key": apiKey,
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
@@ -222,6 +218,15 @@ serve(async (req) => {
     const entitlementError = await requireModule(supabase, "ai_copilot", CORSHeaders);
     if (entitlementError) return entitlementError;
 
+    const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+    if (aiCreds instanceof Response) return aiCreds;
+    if (!aiCreds) {
+      return new Response(
+        JSON.stringify({ error: "Claude API key not configured" }),
+        { status: 500, headers: { ...CORSHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     let convId = conversationId;
     
     if (!convId) {
@@ -267,7 +272,8 @@ serve(async (req) => {
     const initialResponse = await callClaude(
       [...conversationHistory.map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })), { role: "user", content: fullMessage }],
       TOOLS,
-      startTime
+      startTime,
+      aiCreds.key
     );
 
     if (initialResponse.error) {
@@ -276,6 +282,8 @@ serve(async (req) => {
         { status: 500, headers: { ...CORSHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    await recordAiUsage(supabase, "ai-assistant", CLAUDE_MODEL, aiCreds.source, initialResponse.usage);
 
     const toolCalls = initialResponse.content?.filter((c: { type: string }) => c.type === "tool_use") || [];
     let toolResults: ToolResult[] = [];
@@ -314,8 +322,13 @@ serve(async (req) => {
           }))
         ],
         [],
-        startTime
+        startTime,
+        aiCreds.key
       );
+
+      if (!secondResponse.error) {
+        await recordAiUsage(supabase, "ai-assistant", CLAUDE_MODEL, aiCreds.source, secondResponse.usage);
+      }
 
       finalResponse = secondResponse.content?.find((c: { type: string }) => c.type === "text")?.text || finalResponse;
     }

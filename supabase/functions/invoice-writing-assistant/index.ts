@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { requireModule } from '../_shared/entitlements.ts';
+import { getAiCredentials, recordAiUsage } from '../_shared/ai.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,7 +25,7 @@ const DEFAULT_TEMPLATES = [
   { service_type: 'frame_sill', description_template: 'Frame and Sill Cleaning', typical_quantity: 1, typical_unit_price: 8, created_by: 'ai' },
 ];
 
-const suggestLineItems = async (supabase: ReturnType<typeof createSupabaseClient>, customerId: string, routeId?: string, jobExecutionIds?: string[]) => {
+const suggestLineItems = async (supabase: ReturnType<typeof createSupabaseClient>, customerId: string, routeId: string | undefined, jobExecutionIds: string[] | undefined, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>) => {
   const { data: customer } = await supabase.from("customers").select("*, profiles_id").eq("id", customerId).single();
   if (!customer) return { error: "Customer not found" };
 
@@ -75,14 +76,13 @@ Generate invoice line items in JSON:
 Use customer's historical pricing as baseline. British English, professional descriptions.`;
 
   try {
-    const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!claudeKey) {
+    if (!aiCreds || aiCreds instanceof Response) {
       return { suggestions: typicalItems.length > 0 ? typicalItems : DEFAULT_TEMPLATES.map(t => ({ ...t, reasoning: 'Based on typical pricing' })) };
     }
 
     const response = await fetch(CLAUDE_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": claudeKey, "anthropic-version": "2023-06-01" },
+      headers: { "Content-Type": "application/json", "x-api-key": aiCreds.key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 800, messages: [{ role: "user", content: prompt }] })
     });
 
@@ -91,6 +91,7 @@ Use customer's historical pricing as baseline. British English, professional des
     }
 
     const data = await response.json();
+    await recordAiUsage(supabase, "invoice-writing-assistant", CLAUDE_MODEL, aiCreds.source, data.usage);
     const text = data.content?.[0]?.text || "[]";
     const suggestions = JSON.parse(text);
     return { suggestions };
@@ -190,7 +191,10 @@ Deno.serve(async (req) => {
     const { action, customer_id, route_id, job_execution_ids, invoice_id, service_description } = await req.json();
 
     if (action === "suggest-line-items") {
-      const result = await suggestLineItems(supabase, customer_id, route_id, job_execution_ids);
+      const aiCreds = await getAiCredentials(supabase, corsHeaders);
+      if (aiCreds instanceof Response) return aiCreds;
+
+      const result = await suggestLineItems(supabase, customer_id, route_id, job_execution_ids, aiCreds);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

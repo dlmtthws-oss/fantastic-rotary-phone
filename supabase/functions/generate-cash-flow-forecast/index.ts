@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage, type AiCredentials } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -171,9 +172,8 @@ const generateForecast = (
   return forecast;
 };
 
-const generateAISummary = async (forecast: ForecastDay[], avgRevenue: number) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) {
+const generateAISummary = async (forecast: ForecastDay[], avgRevenue: number, supabase: ReturnType<typeof createSupabaseClient>, aiCreds: AiCredentials | null) => {
+  if (!aiCreds) {
     return { summary: "AI analysis unavailable - API key not configured", recommendations: [], riskPeriods: [], positiveTrends: [] };
   }
 
@@ -210,7 +210,7 @@ Respond in JSON format:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -226,6 +226,7 @@ Respond in JSON format:
     }
 
     const data = await response.json();
+    await recordAiUsage(supabase, "generate-cash-flow-forecast", CLAUDE_MODEL, aiCreds.source, data.usage);
     const content = data.content?.[0]?.text || "{}";
     
     try {
@@ -262,6 +263,9 @@ serve(async (req) => {
   const entitlementError = await requireModule(supabase, "cashflow_forecast", CORSHeaders);
   if (entitlementError) return entitlementError;
 
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
+
   try {
     const historical = await getHistoricalPatterns(supabase, userId);
     const outstanding = await getOutstandingInvoices(supabase, userId);
@@ -270,7 +274,7 @@ serve(async (req) => {
 
     const forecast = generateForecast(historical, recurring, outstanding, scheduledExpenses);
 
-    const aiAnalysis = await generateAISummary(forecast, historical.avgMonthlyRevenue / 30);
+    const aiAnalysis = await generateAISummary(forecast, historical.avgMonthlyRevenue / 30, supabase, aiCreds);
 
     const avgConfidence = forecast.reduce((sum, d) => sum + d.confidence, 0) / forecast.length;
 

@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireModule } from '../_shared/entitlements.ts'
+import { getAiCredentials, recordAiUsage } from '../_shared/ai.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,8 +69,6 @@ export default async function handler(req: Request) {
 
     const entitlementError = await requireModule(supabase, "fraud_detection", corsHeaders)
     if (entitlementError) return entitlementError
-
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
 
     const body = await req.json()
     const { trigger_type, data: trigger_data, user_id } = body
@@ -686,41 +685,45 @@ export default async function handler(req: Request) {
         }
       }
 
-      if (["high", "critical"].includes(riskEvents[0].severity) && anthropicKey) {
-        const assessmentBody = {
-          events: riskEvents,
-          context: {
-            trigger_type,
-            user_id,
-            timestamp: new Date().toISOString()
+      if (["high", "critical"].includes(riskEvents[0].severity)) {
+        const aiCreds = await getAiCredentials(supabase, corsHeaders)
+        if (aiCreds && !(aiCreds instanceof Response)) {
+          const assessmentBody = {
+            events: riskEvents,
+            context: {
+              trigger_type,
+              user_id,
+              timestamp: new Date().toISOString()
+            }
           }
-        }
 
-        try {
-          const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': anthropicKey,
-              'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-              model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 500,
-              system: 'You are a fraud detection analyst. Analyze the following risk events and provide an assessment.',
-              messages: [{
-                role: 'user',
-                content: `Analyze these risk events and provide: 1) likelihood of fraud vs error vs normal (percentage), 2) recommended immediate actions, 3) whether user should be suspended (yes/no), 4) any additional information needed. Events: ${JSON.stringify(assessmentBody)}`
-              }]
+          try {
+            const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': aiCreds.key,
+                'anthropic-version': '2023-06-01'
+              },
+              body: JSON.stringify({
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 500,
+                system: 'You are a fraud detection analyst. Analyze the following risk events and provide an assessment.',
+                messages: [{
+                  role: 'user',
+                  content: `Analyze these risk events and provide: 1) likelihood of fraud vs error vs normal (percentage), 2) recommended immediate actions, 3) whether user should be suspended (yes/no), 4) any additional information needed. Events: ${JSON.stringify(assessmentBody)}`
+                }]
+              })
             })
-          })
 
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json()
-            aiAssessment = aiData.content?.[0]?.text || null
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json()
+              aiAssessment = aiData.content?.[0]?.text || null
+              await recordAiUsage(supabase, 'detect-risk-events', 'claude-3-5-sonnet-20241022', aiCreds.source, aiData.usage)
+            }
+          } catch (e) {
+            console.error('AI assessment failed:', e)
           }
-        } catch (e) {
-          console.error('AI assessment failed:', e)
         }
       }
 

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage, type AiCredentials } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -55,7 +56,7 @@ const getCollectionMetrics = async (supabase: ReturnType<typeof createSupabaseCl
   return { collectionRate: totalInvoiced > 0 ? (paidInvoiced / totalInvoiced) * 100 : 0 };
 };
 
-const generateInsight = async (insightType: string, userId: string, companyName: string, startDate: string, endDate: string) => {
+const generateInsight = async (insightType: string, userId: string, companyName: string, startDate: string, endDate: string, aiCreds: AiCredentials | null) => {
   const supabase = createSupabaseClient({ headers: { apikey: '' } } as Request);
   
   const [revenue, expenses, routes, customers, collection] = await Promise.all([
@@ -80,8 +81,7 @@ const generateInsight = async (insightType: string, userId: string, companyName:
     collectionRate: collection.collectionRate
   };
 
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) {
+  if (!aiCreds) {
     return {
       headline: `Week of ${startDate} summary`,
       narrative: "AI insights unavailable - configure API key",
@@ -122,7 +122,7 @@ Generate a report in JSON:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -144,6 +144,7 @@ Generate a report in JSON:
     }
 
     const data = await response.json();
+    await recordAiUsage(supabase, "generate-business-insight", CLAUDE_MODEL, aiCreds.source, data.usage);
     const text = data.content?.[0]?.text || "{}";
     const result = JSON.parse(text);
     return { ...result, metrics };
@@ -159,10 +160,11 @@ Generate a report in JSON:
   }
 };
 
-const handleQuery = async (query: string, userId: string) => {
+const handleQuery = async (query: string, userId: string, aiCreds: AiCredentials | null) => {
   const supabase = createSupabaseClient({ headers: { apikey: '' } } as Request);
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  
+
+  if (!aiCreds) return "AI unavailable - configure API key";
+
   const { data: revenueData } = await supabase.from('payments').select('created_at, amount, invoices!inner(customer_id, total)')
     .eq('profiles_id', userId)
     .gte('created_at', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString());
@@ -207,7 +209,7 @@ Answer the question specifically with numbers. Respond in plain English.`;
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -219,6 +221,7 @@ Answer the question specifically with numbers. Respond in plain English.`;
 
     if (!response.ok) return "Unable to answer question";
     const data = await response.json();
+    await recordAiUsage(supabase, "generate-business-insight", CLAUDE_MODEL, aiCreds.source, data.usage);
     return data.content?.[0]?.text || "No answer available";
   } catch {
     return "Error processing question";
@@ -240,12 +243,15 @@ serve(async (req) => {
   const entitlementError = await requireModule(supabase, "insights_copilot", CORSHeaders);
   if (entitlementError) return entitlementError;
 
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
+
   try {
     const { insight_type, period_start, period_end, query } = await req.json();
     let result;
 
     if (query) {
-      result = await handleQuery(query, userId);
+      result = await handleQuery(query, userId, aiCreds);
       await supabase.from("report_queries").insert({
         user_id: userId,
         query_text: query,
@@ -255,7 +261,7 @@ serve(async (req) => {
     }
 
     const { data: company } = await supabase.from("company_settings").select("company_name").eq("profiles_id", userId).single();
-    result = await generateInsight(insight_type || 'weekly_summary', userId, company?.company_name || 'ClearRoute', period_start, period_end);
+    result = await generateInsight(insight_type || 'weekly_summary', userId, company?.company_name || 'ClearRoute', period_start, period_end, aiCreds);
 
     await supabase.from("business_insights").insert({
       user_id: userId,

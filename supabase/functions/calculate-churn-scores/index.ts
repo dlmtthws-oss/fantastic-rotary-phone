@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -166,9 +167,8 @@ const getRiskLevel = (score: number) => {
   return "low";
 };
 
-const getClaudeAnalysis = async (customerName: string, signals: any) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey || getRiskLevel(signals.score) === "low") {
+const getClaudeAnalysis = async (customerName: string, signals: any, supabase: ReturnType<typeof createSupabaseClient>, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>) => {
+  if (!aiCreds || aiCreds instanceof Response || getRiskLevel(signals.score) === "low") {
     return { analysis: "", actions: [], urgency: "this_month", keyFactor: "" };
   }
 
@@ -199,7 +199,7 @@ Respond in JSON:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -212,6 +212,7 @@ Respond in JSON:
     if (!response.ok) return { analysis: "", actions: [], urgency: "this_month", keyFactor: "" };
 
     const data = await response.json();
+    await recordAiUsage(supabase, "calculate-churn-scores", CLAUDE_MODEL, aiCreds.source, data.usage);
     const text = data.content?.[0]?.text || "{}";
     return JSON.parse(text);
   } catch {
@@ -236,6 +237,9 @@ serve(async (req) => {
 
   const entitlementError = await requireModule(supabase, "churn_prediction", CORSHeaders);
   if (entitlementError) return entitlementError;
+
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
 
   try {
     const customers = await getCustomersWithActivity(supabase, userId);
@@ -284,7 +288,7 @@ serve(async (req) => {
 
       let aiAnalysis: any = { analysis: "", actions: [], urgency: "this_month", keyFactor: "" };
       if (riskLevel !== "low") {
-        aiAnalysis = await getClaudeAnalysis(customer.name, { ...signals, score });
+        aiAnalysis = await getClaudeAnalysis(customer.name, { ...signals, score }, supabase, aiCreds);
       }
 
       await supabase.from("customer_churn_scores").insert({

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -89,9 +90,8 @@ function validateResponse(data: ScanReceiptResponse): ScanReceiptResponse {
   return validated;
 }
 
-async function callClaudeOCR(base64Image: string, imageType: string): Promise<ScanReceiptResponse> {
-  const claudeApiKey = Deno.env.get("CLAUDE_API_KEY");
-  if (!claudeApiKey) {
+async function callClaudeOCR(base64Image: string, imageType: string, supabase: ReturnType<typeof createSupabaseClient>, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>): Promise<ScanReceiptResponse> {
+  if (!aiCreds || aiCreds instanceof Response) {
     throw new Error("Claude API key not configured");
   }
 
@@ -138,7 +138,7 @@ If you cannot read a field clearly, return null for that field. Never guess amou
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": claudeApiKey,
+      "x-api-key": aiCreds.key,
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(requestBody),
@@ -150,8 +150,9 @@ If you cannot read a field clearly, return null for that field. Never guess amou
     throw new Error(`Claude API error: ${response.status}`);
   }
 
-  const result = await response.json() as { content: Array<{ type: string; text?: string }> };
-  
+  const result = await response.json() as { content: Array<{ type: string; text?: string }>; usage?: { input_tokens?: number; output_tokens?: number } };
+  await recordAiUsage(supabase, "scan-receipt", CLAUDE_MODEL, aiCreds.source, result.usage);
+
   // Find the text content in the response
   const textContent = result.content.find((c) => c.type === "text");
   if (!textContent?.text) {
@@ -159,7 +160,7 @@ If you cannot read a field clearly, return null for that field. Never guess amou
   }
 
   // Parse JSON from response
-  const jsonMatch = textContent.text.match(/\{[\s\S*\}/);
+  const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Could not parse JSON from Claude response");
   }
@@ -177,6 +178,9 @@ serve(async (req) => {
 
   const entitlementError = await requireModule(supabase, "receipt_ocr", CORSHeaders);
   if (entitlementError) return entitlementError;
+
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
 
   try {
     const { image_base64, image_type } = await req.json() as ScanReceiptRequest;
@@ -197,7 +201,7 @@ serve(async (req) => {
       );
     }
 
-    const result = await callClaudeOCR(image_base64, image_type);
+    const result = await callClaudeOCR(image_base64, image_type, supabase, aiCreds);
 
     return new Response(JSON.stringify(result), {
       headers: { ...CORSHeaders, "Content-Type": "application/json" },

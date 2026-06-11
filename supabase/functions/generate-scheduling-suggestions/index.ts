@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.7";
 import { requireModule } from "../_shared/entitlements.ts";
+import { getAiCredentials, recordAiUsage } from "../_shared/ai.ts";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
@@ -55,16 +56,15 @@ const getRouteStopHistory = async (supabase: ReturnType<typeof createSupabaseCli
   return data || [];
 };
 
-const callClaude = async (prompt: string) => {
-  const claudeKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!claudeKey) return [];
+const callClaude = async (prompt: string, supabase: ReturnType<typeof createSupabaseClient>, aiCreds: Awaited<ReturnType<typeof getAiCredentials>>) => {
+  if (!aiCreds || aiCreds instanceof Response) return [];
 
   try {
     const response = await fetch(CLAUDE_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": claudeKey,
+        "x-api-key": aiCreds.key,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -78,6 +78,7 @@ const callClaude = async (prompt: string) => {
     if (!response.ok) return [];
 
     const result = await response.json();
+    await recordAiUsage(supabase, "generate-scheduling-suggestions", CLAUDE_MODEL, aiCreds.source, result.usage);
     const text = result.content?.[0]?.text || "[]";
     return JSON.parse(text);
   } catch {
@@ -102,6 +103,9 @@ serve(async (req) => {
 
   const entitlementError = await requireModule(supabase, "smart_scheduling_ai", CORSHeaders);
   if (entitlementError) return entitlementError;
+
+  const aiCreds = await getAiCredentials(supabase, CORSHeaders);
+  if (aiCreds instanceof Response) return aiCreds;
 
   try {
     const [overdue, workload, gaps, upcoming] = await Promise.all([
@@ -146,7 +150,7 @@ For each suggestion provide:
 
 Respond only with a JSON array, no other text.`;
 
-    const suggestions = await callClaude(prompt);
+    const suggestions = await callClaude(prompt, supabase, aiCreds);
 
     if (suggestions.length > 0) {
       await supabase.from("scheduling_suggestions").delete().eq("user_id", userId).eq("status", "pending");

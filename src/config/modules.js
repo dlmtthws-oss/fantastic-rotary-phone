@@ -205,6 +205,11 @@ export const MODULES = {
     tier: 'ai',
     description: 'AI-powered monitoring for fraud and security risks.',
   },
+  trading_212: {
+    label: 'Trading 212',
+    tier: 'ai',
+    description: 'Portfolio tracking, performance analytics and AI insights via Trading 212.',
+  },
 };
 
 const modulesForTier = (tier) =>

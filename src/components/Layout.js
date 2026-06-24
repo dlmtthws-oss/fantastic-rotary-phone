@@ -27,6 +27,14 @@ const adminLinks = [
     { to: '/reports/insights', label: 'Insights', adminOnly: true, module: 'insights_copilot' },
     { to: '/reports/anomalies', label: 'Anomalies', adminOnly: true, module: 'anomaly_detection' }
   ]},
+  { to: '/trading', label: 'Trading', icon: '📈', module: 'trading_212', subItems: [
+    { to: '/trading', label: 'Dashboard' },
+    { to: '/trading/positions', label: 'Positions' },
+    { to: '/trading/history', label: 'History' },
+    { to: '/trading/insights', label: 'AI Insights' },
+    { to: '/trading/pies', label: 'Pies' },
+    { to: '/trading/settings', label: 'Settings' }
+  ]},
   { to: '/settings', label: 'Settings', icon: '⚙️', subItems: [
     { to: '/settings', label: 'General' },
     { to: '/settings/audit-log', label: 'Audit Log', adminOnly: true, module: 'audit_log' }

@@ -49,6 +49,12 @@ const Legal = lazy(() => import('./pages/Legal'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Upgrade = lazy(() => import('./pages/Upgrade'));
 const PlanAndModules = lazy(() => import('./pages/PlanAndModules'));
+const TradingDashboard = lazy(() => import('./pages/TradingDashboard'));
+const TradingPositions = lazy(() => import('./pages/TradingPositions'));
+const TradingHistory = lazy(() => import('./pages/TradingHistory'));
+const TradingInsights = lazy(() => import('./pages/TradingInsights'));
+const TradingSettings = lazy(() => import('./pages/TradingSettings'));
+const TradingPies = lazy(() => import('./pages/TradingPies'));
 
 function PageLoading() {
   return (
@@ -185,6 +191,12 @@ function App() {
                 <Route path="/reports/anomalies/dashboard" element={<RequireModule module="anomaly_detection"><RiskDashboard /></RequireModule>} />
                 <Route path="/reports/anomalies/invoices" element={<RequireModule module="anomaly_detection"><AnomalyManagement user={user} /></RequireModule>} />
                 <Route path="/routes/:id/performance" element={<RequireModule module="route_optimisation"><RoutePerformance /></RequireModule>} />
+                <Route path="/trading" element={<RequireModule module="trading_212"><TradingDashboard user={user} /></RequireModule>} />
+                <Route path="/trading/positions" element={<RequireModule module="trading_212"><TradingPositions user={user} /></RequireModule>} />
+                <Route path="/trading/history" element={<RequireModule module="trading_212"><TradingHistory user={user} /></RequireModule>} />
+                <Route path="/trading/insights" element={<RequireModule module="trading_212"><TradingInsights user={user} /></RequireModule>} />
+                <Route path="/trading/settings" element={<RequireModule module="trading_212"><TradingSettings user={user} /></RequireModule>} />
+                <Route path="/trading/pies" element={<RequireModule module="trading_212"><TradingPies user={user} /></RequireModule>} />
                 <Route path="/upgrade/:moduleKey" element={<Upgrade />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>

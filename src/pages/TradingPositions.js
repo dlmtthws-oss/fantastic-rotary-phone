@@ -189,8 +189,91 @@ export default function TradingPositions({ user }) {
         </select>
       </div>
 
-      {/* Positions Table */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      {/* Sort controls (mobile) */}
+      <div className="flex items-center gap-2 md:hidden">
+        <label className="text-xs text-gray-500">Sort by</label>
+        <select
+          value={sortField}
+          onChange={e => { setSortField(e.target.value); setSortDir('desc') }}
+          className="px-2 py-1.5 border rounded-lg text-sm flex-1"
+        >
+          <option value="value">Value</option>
+          <option value="pnl">P&L</option>
+          <option value="pnlPercent">P&L %</option>
+          <option value="ticker">Ticker</option>
+          <option value="name">Name</option>
+          <option value="quantity">Quantity</option>
+        </select>
+        <button
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+          className="px-2 py-1.5 border rounded-lg text-sm"
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="bg-white rounded-xl border p-4 h-28 animate-pulse" />)}</div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-xl border p-8 text-center text-gray-400">
+            {search || filterType !== 'all' ? 'No positions match your filters.' : 'No open positions.'}
+          </div>
+        ) : (
+          filtered.map(pos => {
+            const weight = totalValue > 0 ? (pos.value / totalValue) * 100 : 0
+            return (
+              <div key={pos.ticker} className="bg-white rounded-xl border p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-bold text-base">{pos.ticker}</p>
+                    <p className="text-xs text-gray-500 truncate max-w-[180px]">{pos.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-base">{formatCurrency(pos.value)}</p>
+                    <div className="flex items-center justify-end gap-1">
+                      <div className="w-12 bg-gray-200 rounded-full h-1">
+                        <div className="bg-blue-500 h-1 rounded-full" style={{ width: `${Math.min(weight, 100)}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-400">{weight.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Qty</span>
+                    <span>{pos.quantity.toFixed(pos.quantity % 1 === 0 ? 0 : 4)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Current</span>
+                    <span>{formatCurrency(pos.currentPrice)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Avg</span>
+                    <span>{formatCurrency(pos.averagePrice)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">P&L</span>
+                    <span className={`font-medium ${pos.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {pos.pnl >= 0 ? '+' : ''}{formatCurrency(pos.pnl)}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t flex justify-between items-center">
+                  <span className="text-xs text-gray-400">{pos.type}</span>
+                  <span className={`text-sm font-semibold ${pos.pnlPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {pos.pnlPercent >= 0 ? '+' : ''}{pos.pnlPercent.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Desktop Table */}
+      <div className="hidden md:block bg-white rounded-xl border overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-gray-400">Loading positions...</div>
         ) : filtered.length === 0 ? (

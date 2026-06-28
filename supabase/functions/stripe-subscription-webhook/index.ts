@@ -11,6 +11,7 @@ interface StripeSubscription {
   customer: string;
   status: string;
   items: { data: Array<{ price: { id: string } }> };
+  metadata?: Record<string, string>;
 }
 
 interface StripeEvent {
@@ -135,14 +136,21 @@ serve(async (req) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
-        const { data: companySettings, error: fetchError } = await supabase
+        // Resolve the OWNING company - never a "limit(1)" guess. Prefer the
+        // company_id stamped in subscription metadata at checkout, then fall
+        // back to matching the Stripe customer id.
+        const metaCompanyId = subscription.metadata?.company_id;
+        let lookup = supabase
           .from("company_settings")
-          .select("id, plan, stripe_customer_id")
-          .limit(1)
-          .single();
+          .select("id, company_id, plan, stripe_customer_id");
+        lookup = metaCompanyId
+          ? lookup.eq("company_id", metaCompanyId)
+          : lookup.eq("stripe_customer_id", subscription.customer);
+
+        const { data: companySettings, error: fetchError } = await lookup.maybeSingle();
 
         if (fetchError || !companySettings) {
-          console.error("Failed to load company_settings:", fetchError);
+          console.error("No company matched subscription webhook (company_id/customer):", fetchError);
           break;
         }
 

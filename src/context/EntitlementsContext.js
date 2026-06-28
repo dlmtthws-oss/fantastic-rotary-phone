@@ -5,7 +5,9 @@ import { PLANS, resolveEntitlements } from '../config/modules'
 const EntitlementsContext = createContext(null)
 
 export function EntitlementsProvider({ children }) {
-  const [plan, setPlan] = useState('ai')
+  // Default to the free floor, never full access. Real plan loads from
+  // company_settings (RLS-scoped to the caller's company).
+  const [plan, setPlan] = useState('solo')
   const [enabledModules, setEnabledModules] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -23,10 +25,9 @@ export function EntitlementsProvider({ children }) {
         if (cancelled) return
 
         if (error || !data) {
-          // If entitlements can't be loaded (network error, migration not
-          // yet applied, etc.) default to full access so nothing
-          // disappears for existing users.
-          setPlan('ai')
+          // If entitlements can't be loaded (network error, etc.) fall back
+          // to the free floor - never full access.
+          setPlan('solo')
           setEnabledModules(null)
         } else {
           setPlan(data.plan || 'solo')
@@ -34,7 +35,7 @@ export function EntitlementsProvider({ children }) {
         }
       } catch (err) {
         if (!cancelled) {
-          setPlan('ai')
+          setPlan('solo')
           setEnabledModules(null)
         }
       } finally {
@@ -46,10 +47,10 @@ export function EntitlementsProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
-  // While loading, behave as if on the AI plan so the app doesn't briefly
-  // hide modules (or bounce a user to the Upgrade page) before the real
-  // plan has loaded.
-  const effectivePlan = loading ? 'ai' : plan
+  // Until the real plan loads, assume the free floor so premium features
+  // aren't briefly exposed to free accounts (the server enforces entitlements
+  // independently on every privileged call).
+  const effectivePlan = plan
   const modules = useMemo(
     () => resolveEntitlements(effectivePlan, enabledModules),
     [effectivePlan, enabledModules]

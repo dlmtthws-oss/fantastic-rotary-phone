@@ -239,6 +239,11 @@ export const PLANS = {
     perSeat: true,
     price: 149,
     paid: true,
+    // Accounting/bank integrations aren't production-ready yet (the Xero /
+    // QuickBooks / Open Banking connection storage and sync functions still
+    // need building), so this tier is shown as "coming soon" and can't be
+    // purchased. Flip `comingSoon` to false once those features ship.
+    comingSoon: true,
     modules: [...modulesForTier('solo'), ...modulesForTier('team'), ...modulesForTier('business')],
   },
   ai: {
@@ -248,6 +253,9 @@ export const PLANS = {
     perSeat: true,
     price: 299,
     paid: true,
+    // AI copilots need a function/table/UI rebuild before sale. Not
+    // purchasable until then.
+    comingSoon: true,
     modules: [
       ...modulesForTier('solo'),
       ...modulesForTier('team'),

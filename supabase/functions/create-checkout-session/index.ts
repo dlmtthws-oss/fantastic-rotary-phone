@@ -20,6 +20,9 @@ const PRICE_ENV: Record<string, string> = {
   business: "STRIPE_PRICE_ID_BUSINESS",
   ai: "STRIPE_PRICE_ID_AI",
 };
+// Tiers not yet production-ready - keep them unsellable server-side too, so
+// the UI gate can't be bypassed. Keep in sync with `comingSoon` in modules.js.
+const COMING_SOON = new Set(["business", "ai"]);
 
 // deno-lint-ignore no-explicit-any
 type Supa = any;
@@ -70,6 +73,7 @@ serve(async (req) => {
     if (!companyId) return json({ error: "Not authenticated" }, 401);
 
     const { plan, seats } = await req.json();
+    if (COMING_SOON.has(plan)) return json({ error: "This plan isn't available yet" }, 400);
     const priceEnv = PRICE_ENV[plan];
     if (!priceEnv) return json({ error: "Unknown plan" }, 400);
     const priceId = Deno.env.get(priceEnv);

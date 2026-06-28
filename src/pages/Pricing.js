@@ -50,13 +50,19 @@ export default function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  to="/login?mode=register"
-                  className={`mt-6 text-center px-4 py-2 rounded-lg font-medium ${featured ? 'text-white' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
-                  style={featured ? { background: 'linear-gradient(135deg, #3b82f6, #2563eb)' } : undefined}
-                >
-                  {p.paid ? 'Start free trial' : 'Get started free'}
-                </Link>
+                {p.comingSoon ? (
+                  <span className="mt-6 text-center px-4 py-2 rounded-lg font-medium bg-gray-100 text-gray-400 cursor-not-allowed">
+                    Coming soon
+                  </span>
+                ) : (
+                  <Link
+                    to="/login?mode=register"
+                    className={`mt-6 text-center px-4 py-2 rounded-lg font-medium ${featured ? 'text-white' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+                    style={featured ? { background: 'linear-gradient(135deg, #3b82f6, #2563eb)' } : undefined}
+                  >
+                    {p.paid ? 'Start free trial' : 'Get started free'}
+                  </Link>
+                )}
               </div>
             )
           })}

@@ -126,7 +126,12 @@ export default function PlanAndModules() {
               <p className="text-xs text-gray-500 mb-2">{p.perSeat ? 'per seat · billed monthly' : 'single user'}</p>
               <p className="text-sm text-gray-600 flex-1">{p.description}</p>
               <div className="mt-4">
-                {p.paid && !isCurrent && (
+                {p.comingSoon && !isCurrent && (
+                  <span className="block text-center w-full px-3 py-2 bg-gray-100 text-gray-400 rounded-md text-sm">
+                    Coming soon
+                  </span>
+                )}
+                {p.paid && !p.comingSoon && !isCurrent && (
                   <button
                     onClick={() => startCheckout(key)}
                     disabled={busy === key}

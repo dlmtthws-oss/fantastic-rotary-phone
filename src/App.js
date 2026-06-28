@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { supabase } from './lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -51,6 +51,8 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const Upgrade = lazy(() => import('./pages/Upgrade'));
 const PlanAndModules = lazy(() => import('./pages/PlanAndModules'));
 const BusinessProfile = lazy(() => import('./pages/BusinessProfile'));
+const Landing = lazy(() => import('./pages/Landing'));
+const Pricing = lazy(() => import('./pages/Pricing'));
 
 function PageLoading() {
   return (
@@ -108,9 +110,24 @@ function AppInner() {
   }
 
   if (!user) {
+    // Public, unauthenticated experience: marketing + auth + the public
+    // flows (invitation accept, customer portal, legal).
     return (
       <ErrorBoundary>
-        <Login />
+        <Router>
+          <Suspense fallback={<PageLoading />}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/invitation/:token" element={<InvitationAccept />} />
+              <Route path="/portal/:token" element={<Portal />} />
+              <Route path="/legal" element={<Legal />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </Router>
       </ErrorBoundary>
     );
   }
@@ -143,6 +160,9 @@ function AppInner() {
             <Suspense fallback={<PageLoading />}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                {/* Public-only paths: once signed in, send these to the app. */}
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="/pricing" element={<Navigate to="/settings/plan" replace />} />
                 <Route path="/onboarding" element={<OnboardingWizard user={user} onComplete={() => setShowOnboarding(false)} />} />
                 <Route path="/invitation/:token" element={<InvitationAccept />} />
                 <Route path="/customers" element={<Customers />} />

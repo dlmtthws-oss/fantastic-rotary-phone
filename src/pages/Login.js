@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { BUSINESS_TYPE_OPTIONS, DEFAULT_BUSINESS_TYPE } from '../config/verticals'
 
@@ -6,7 +7,9 @@ import { BUSINESS_TYPE_OPTIONS, DEFAULT_BUSINESS_TYPE } from '../config/vertical
 // CompanyProvider then loads (or provisions) the caller's company, so this
 // screen doesn't need to fabricate a user object or call back into App.
 export default function Login() {
-  const [mode, setMode] = useState('signin') // 'signin' | 'register'
+  const [params] = useSearchParams()
+  // Marketing CTAs link to /login?mode=register to open signup directly.
+  const [mode, setMode] = useState(params.get('mode') === 'register' ? 'register' : 'signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -155,6 +158,9 @@ export default function Login() {
           >
             {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Start your business"}
           </button>
+          <div className="mt-4">
+            <Link to="/" className="text-xs text-gray-400 hover:text-gray-600">← Back to home</Link>
+          </div>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import InstallPrompt from './InstallPrompt'
 import AIAssistant from './AIAssistant.js'
 import { supabase } from '../lib/supabase'
 import { useEntitlements } from '../context/EntitlementsContext'
+import { useVertical } from '../hooks/useVertical'
 
 const adminLinks = [
   { to: '/', label: 'Dashboard', icon: '📊' },
@@ -43,8 +44,17 @@ export default function Layout({ user, children, onLogout }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const navigate = useNavigate()
   const { isEntitled } = useEntitlements()
+  const vertical = useVertical()
 
-  const isWorker = user?.role === 'worker'
+  // Per-trade label for "Routes" (e.g. window cleaning = "Rounds",
+  // gardening = "Visit schedules").
+  const labelFor = (to, fallback) => {
+    if (to === '/routes') return vertical.routeNounPlural
+    if (to === '/my-routes') return `My ${vertical.routeNounPlural}`
+    return fallback
+  }
+
+  const isWorker = user?.role === 'worker' || user?.role === 'field_worker'
   const canSearch = !isWorker // Only admin/manager can use global search
   const links = (isWorker ? workerLinks : adminLinks).filter(
     link => !link.module || isEntitled(link.module)
@@ -98,13 +108,17 @@ export default function Layout({ user, children, onLogout }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside 
+      <aside
         className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-gray-900 text-white transition-all duration-300 flex flex-col`}
       >
+        {/* Accent strip reflects the current trade's theme colour */}
+        <div style={{ height: 3, background: vertical.accent }} />
         {/* Logo */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-gray-700">
           {sidebarOpen && (
-            <span className="font-bold text-lg tracking-tight">ClearRoute</span>
+            <span className="font-bold text-lg tracking-tight" style={{ color: vertical.accent }}>
+              ClearRoute
+            </span>
           )}
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -133,7 +147,7 @@ export default function Layout({ user, children, onLogout }) {
                       }
                     >
                       <span className="text-lg">{icon}</span>
-                      {sidebarOpen && <span>{label}</span>}
+                      {sidebarOpen && <span>{labelFor(to, label)}</span>}
                     </NavLink>
                     {sidebarOpen && subItems.map(sub => (
                       (sub.adminOnly && user?.role !== 'admin') || (sub.module && !isEntitled(sub.module)) ? null : (

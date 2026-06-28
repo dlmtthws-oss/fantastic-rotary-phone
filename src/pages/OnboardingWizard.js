@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useCompany } from '../context/CompanyContext'
 
 const TOTAL_STEPS = 6
 
 export default function OnboardingWizard({ user, onComplete }) {
   const navigate = useNavigate()
+  const { companyId } = useCompany()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState({
@@ -56,8 +58,7 @@ export default function OnboardingWizard({ user, onComplete }) {
     const { data: settings } = await supabase
       .from('company_settings')
       .select('onboarding_step, onboarding_completed')
-      .limit(1)
-      .single()
+      .maybeSingle()
 
     if (settings?.onboarding_step > 0) {
       setStep(settings.onboarding_step)
@@ -71,10 +72,11 @@ export default function OnboardingWizard({ user, onComplete }) {
   async function saveProgress(currentStep) {
     await supabase
       .from('company_settings')
-      .upsert({
+      .update({
         onboarding_step: currentStep,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'id' })
+      })
+      .eq('company_id', companyId)
   }
 
   async function handleNext() {
@@ -84,13 +86,15 @@ export default function OnboardingWizard({ user, onComplete }) {
       if (step === 2) {
         await supabase
           .from('company_settings')
-          .upsert({ ...companySettings, updated_at: new Date().toISOString() })
+          .update({ ...companySettings, updated_at: new Date().toISOString() })
+          .eq('company_id', companyId)
       }
 
       if (step === 3 && customer.name) {
         const { data: customerData } = await supabase
           .from('customers')
           .insert([{
+            company_id: companyId,
             name: customer.name,
             address_line_1: customer.address_line_1,
             postcode: customer.postcode,
@@ -116,6 +120,7 @@ export default function OnboardingWizard({ user, onComplete }) {
         const { data: routeData } = await supabase
           .from('routes')
           .insert([{
+            company_id: companyId,
             name: route.name,
             scheduled_date: route.scheduled_date,
             status: 'scheduled'
@@ -137,28 +142,32 @@ export default function OnboardingWizard({ user, onComplete }) {
       if (step === 5) {
         await supabase
           .from('company_settings')
-          .upsert({
+          .update({
             default_payment_terms: paymentTerms,
             payment_method: paymentMethod,
             updated_at: new Date().toISOString()
           })
+          .eq('company_id', companyId)
       }
 
       if (step === 6 && teamMembers.length > 0) {
         const validMembers = teamMembers.filter(m => m.name && m.email)
         for (const member of validMembers) {
-          const { data: profile } = await supabase
-            .from('profiles')
+          // Create an invitation (company_id is auto-stamped); the invitee
+          // joins this company when they accept.
+          const { data: invitation } = await supabase
+            .from('invitations')
             .insert([{
+              company_id: companyId,
               full_name: member.name,
               email: member.email,
               role: member.role,
-              status: 'invited'
+              status: 'pending'
             }])
             .select()
             .single()
 
-          if (profile) {
+          if (invitation) {
             setSummary(s => ({ ...s, teamInvited: s.teamInvited + 1 }))
           }
         }
@@ -180,11 +189,12 @@ export default function OnboardingWizard({ user, onComplete }) {
   async function completeOnboarding() {
     await supabase
       .from('company_settings')
-      .upsert({
+      .update({
         onboarding_completed: true,
         onboarding_step: TOTAL_STEPS,
         updated_at: new Date().toISOString()
       })
+      .eq('company_id', companyId)
 
     if (onComplete) {
       onComplete()
@@ -195,11 +205,12 @@ export default function OnboardingWizard({ user, onComplete }) {
   async function handleSkip() {
     await supabase
       .from('company_settings')
-      .upsert({
+      .update({
         onboarding_completed: true,
         onboarding_step: 0,
         updated_at: new Date().toISOString()
       })
+      .eq('company_id', companyId)
 
     navigate('/')
   }

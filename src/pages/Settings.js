@@ -6,6 +6,11 @@ export default function Settings({ user }) {
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Link to="/settings/business" className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+          <div className="text-2xl mb-2">🏢</div>
+          <h3 className="font-semibold">Business Profile</h3>
+          <p className="text-sm text-gray-600">Update your business name and trade</p>
+        </Link>
         <Link to="/invite" className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
           <div className="text-2xl mb-2">✉️</div>
           <h3 className="font-semibold">Invite Users</h3>

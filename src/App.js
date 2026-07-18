@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { supabase } from './lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import OfflineBanner from './components/OfflineBanner';
 import { SkeletonTable } from './components/SkeletonComponents';
 import { EntitlementsProvider } from './context/EntitlementsContext';
+import { CompanyProvider, useCompany } from './context/CompanyContext';
 import RequireModule from './components/RequireModule';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -49,6 +50,9 @@ const Legal = lazy(() => import('./pages/Legal'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Upgrade = lazy(() => import('./pages/Upgrade'));
 const PlanAndModules = lazy(() => import('./pages/PlanAndModules'));
+const BusinessProfile = lazy(() => import('./pages/BusinessProfile'));
+const Landing = lazy(() => import('./pages/Landing'));
+const Pricing = lazy(() => import('./pages/Pricing'));
 
 function PageLoading() {
   return (
@@ -58,34 +62,28 @@ function PageLoading() {
   );
 }
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+function AppInner() {
+  const { session, profile, company, loading } = useCompany();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
-  useEffect(() => {
-    async function seedDemo() {
-      try {
-        const { seedDemoData } = await import('./lib/seedDemo')
-        await seedDemoData()
-      } catch (e) {
-        console.log('Seed skipped')
-      }
-      setLoading(false)
-    }
-    seedDemo()
-  }, [])
+  const role = profile?.role;
+  const isWorker = role === 'worker' || role === 'field_worker';
+  // A user object shaped like the one pages already expect, derived from the
+  // real session + profile instead of a fabricated demo object.
+  const user = session?.user
+    ? { ...session.user, ...profile, role, is_worker: isWorker, is_admin: !isWorker }
+    : null;
 
   useEffect(() => {
     async function checkOnboarding() {
-      if (!user || user.is_worker || user.role === 'worker' || !onboardingChecked) return
+      if (!user || isWorker || onboardingChecked || !company) return
 
+      // RLS scopes this to the caller's own company row.
       const { data: settings } = await supabase
         .from('company_settings')
-        .select('onboarding_completed, onboarding_step')
-        .limit(1)
-        .single()
+        .select('onboarding_completed')
+        .maybeSingle()
 
       if (settings && !settings.onboarding_completed) {
         setShowOnboarding(true)
@@ -93,14 +91,11 @@ function App() {
       setOnboardingChecked(true)
     }
     checkOnboarding()
-  }, [user, onboardingChecked])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isWorker, onboardingChecked, company])
 
-  const handleLogin = (userData) => {
-    setUser(userData);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
   if (loading) {
@@ -115,9 +110,24 @@ function App() {
   }
 
   if (!user) {
+    // Public, unauthenticated experience: marketing + auth + the public
+    // flows (invitation accept, customer portal, legal).
     return (
       <ErrorBoundary>
-        <Login onLogin={handleLogin} />
+        <Router>
+          <Suspense fallback={<PageLoading />}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/invitation/:token" element={<InvitationAccept />} />
+              <Route path="/portal/:token" element={<Portal />} />
+              <Route path="/legal" element={<Legal />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </Router>
       </ErrorBoundary>
     );
   }
@@ -150,6 +160,9 @@ function App() {
             <Suspense fallback={<PageLoading />}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                {/* Public-only paths: once signed in, send these to the app. */}
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="/pricing" element={<Navigate to="/settings/plan" replace />} />
                 <Route path="/onboarding" element={<OnboardingWizard user={user} onComplete={() => setShowOnboarding(false)} />} />
                 <Route path="/invitation/:token" element={<InvitationAccept />} />
                 <Route path="/customers" element={<Customers />} />
@@ -177,6 +190,7 @@ function App() {
                 <Route path="/customers/health" element={<RequireModule module="churn_prediction"><CustomerHealth user={user} /></RequireModule>} />
                 <Route path="/workers" element={<RequireModule module="multi_user"><Workers /></RequireModule>} />
                 <Route path="/settings" element={<Settings user={user} />} />
+                <Route path="/settings/business" element={<BusinessProfile />} />
                 <Route path="/settings/plan" element={<PlanAndModules />} />
                 <Route path="/invite" element={<RequireModule module="multi_user"><InviteUsers user={user} /></RequireModule>} />
                 <Route path="/settings/audit-log" element={<RequireModule module="audit_log"><AuditLog /></RequireModule>} />
@@ -193,6 +207,14 @@ function App() {
         </Router>
       </EntitlementsProvider>
     </ErrorBoundary>
+  );
+}
+
+function App() {
+  return (
+    <CompanyProvider>
+      <AppInner />
+    </CompanyProvider>
   );
 }
 

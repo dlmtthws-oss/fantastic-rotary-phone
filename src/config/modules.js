@@ -210,12 +210,17 @@ export const MODULES = {
 const modulesForTier = (tier) =>
   Object.keys(MODULES).filter((key) => MODULES[key].tier === tier);
 
+// Monthly price in GBP. Solo is the free baseline; Team/Business/AI are the
+// paid, subscribable tiers (each maps to a Stripe price - see STRIPE_SETUP.md).
+// `paid: true` marks tiers that go through Stripe Checkout.
 export const PLANS = {
   solo: {
     key: 'solo',
     name: 'Solo',
     description: 'Everything a sole trader needs to run their round.',
     perSeat: false,
+    price: 0,
+    paid: false,
     modules: [...modulesForTier('solo')],
   },
   team: {
@@ -223,6 +228,8 @@ export const PLANS = {
     name: 'Team',
     description: 'Adds scheduling, quotes, the customer portal and team management for multi-worker businesses.',
     perSeat: true,
+    price: 79,
+    paid: true,
     modules: [...modulesForTier('solo'), ...modulesForTier('team')],
   },
   business: {
@@ -230,6 +237,13 @@ export const PLANS = {
     name: 'Business',
     description: 'Adds accounting integrations, VAT submission and compliance tools.',
     perSeat: true,
+    price: 149,
+    paid: true,
+    // Accounting/bank integrations aren't production-ready yet (the Xero /
+    // QuickBooks / Open Banking connection storage and sync functions still
+    // need building), so this tier is shown as "coming soon" and can't be
+    // purchased. Flip `comingSoon` to false once those features ship.
+    comingSoon: true,
     modules: [...modulesForTier('solo'), ...modulesForTier('team'), ...modulesForTier('business')],
   },
   ai: {
@@ -237,6 +251,11 @@ export const PLANS = {
     name: 'AI',
     description: 'Everything in Business, plus AI copilots across the app.',
     perSeat: true,
+    price: 299,
+    paid: true,
+    // AI copilots need a function/table/UI rebuild before sale. Not
+    // purchasable until then.
+    comingSoon: true,
     modules: [
       ...modulesForTier('solo'),
       ...modulesForTier('team'),

@@ -1,86 +1,62 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { BUSINESS_TYPE_OPTIONS, DEFAULT_BUSINESS_TYPE } from '../config/verticals'
 
-export default function Login({ onLogin }) {
+// Real Supabase Auth. Signing in or registering creates a session; the
+// CompanyProvider then loads (or provisions) the caller's company, so this
+// screen doesn't need to fabricate a user object or call back into App.
+export default function Login() {
+  const [params] = useSearchParams()
+  // Marketing CTAs link to /login?mode=register to open signup directly.
+  const [mode, setMode] = useState(params.get('mode') === 'register' ? 'register' : 'signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [businessName, setBusinessName] = useState('')
+  const [businessType, setBusinessType] = useState(DEFAULT_BUSINESS_TYPE)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [isRegister, setIsRegister] = useState(false)
-  const [loginAs, setLoginAs] = useState('admin')
-  const [workers, setWorkers] = useState([])
-  const [selectedWorker, setSelectedWorker] = useState('')
-  const INVITE_ONLY = true // Set to false to open registration
-
-  // Hardcode to prevent signups when invite-only
-  useEffect(() => {
-    if (INVITE_ONLY) {
-      setIsRegister(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadWorkers()
-  }, [])
-
-  async function loadWorkers() {
-    const { data } = await supabase
-      .from('workers')
-      .select('id, name, email, role')
-      .eq('is_active', true)
-      .order('name')
-    setWorkers(data || [])
-  }
+  const [info, setInfo] = useState('')
 
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setInfo('')
 
     try {
-      if (loginAs === 'worker') {
-        const worker = workers.find(w => w.id === selectedWorker)
-        if (!worker) {
-          setError('Please select a worker')
-          setLoading(false)
-          return
-        }
-        if (onLogin) onLogin({ ...worker, is_worker: true, role: 'worker' })
-      } else if (isRegister) {
-        const { error } = await supabase.auth.signUp({ 
-          email, 
+      if (mode === 'register') {
+        // Carry the business details in user_metadata so the company can be
+        // provisioned server-side on first authenticated load.
+        const { data, error } = await supabase.auth.signUp({
+          email,
           password,
           options: {
             data: {
-              role: loginAs
-            }
-          }
+              full_name: fullName,
+              business_name: businessName,
+              business_type: businessType,
+            },
+          },
         })
         if (error) throw error
-        alert('Check your email for confirmation link!')
+        if (!data.session) {
+          setInfo('Check your email to confirm your account, then sign in.')
+        }
+        // With a session, CompanyProvider's auth listener provisions the
+        // company automatically - nothing else to do here.
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single()
-        
-        if (onLogin) onLogin({ 
-          ...data.user, 
-          ...profile,
-          is_admin: true, 
-          role: profile?.role || 'admin'
-        })
       }
     } catch (err) {
       setError(err.message)
     }
     setLoading(false)
   }
+
+  const isRegister = mode === 'register'
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)'}}>
@@ -90,129 +66,100 @@ export default function Login({ onLogin }) {
             <span className="text-3xl">🪟</span>
           </div>
           <h1 className="text-2xl font-bold" style={{color: '#0f172a'}}>ClearRoute</h1>
-          <p className="text-gray-500 mt-2">Window Cleaning Business Management</p>
-        </div>
-
-        <div className="flex gap-2 mb-6">
-          <button
-            type="button"
-            onClick={() => setLoginAs('admin')}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-              loginAs === 'admin' ? 'text-white' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-            }`}
-            style={{background: loginAs === 'admin' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : undefined}}
-          >
-            Admin / Manager
-          </button>
-          <button
-            type="button"
-            onClick={() => setLoginAs('worker')}
-            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-              loginAs === 'worker' ? 'text-white' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-            }`}
-            style={{background: loginAs === 'worker' ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : undefined}}
-          >
-            Field Worker
-          </button>
+          <p className="text-gray-500 mt-2">Field Service Business Management</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {loginAs === 'worker' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Worker</label>
-              <select
-                value={selectedWorker}
-                onChange={e => setSelectedWorker(e.target.value)}
-                className="input"
-                required
-              >
-                <option value="">Choose a worker...</option>
-                {workers.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
-              {workers.length === 0 && (
-                <p className="text-xs text-orange-600 mt-1">No workers found. Ask admin to add workers.</p>
-              )}
-            </div>
-          ) : (
+          {isRegister && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Your name</label>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  type="text"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
                   className="input"
-                  placeholder="you@example.com"
-                  required={loginAs === 'admin'}
+                  placeholder="Jane Smith"
+                  required
                 />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Business name</label>
                 <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  type="text"
+                  value={businessName}
+                  onChange={e => setBusinessName(e.target.value)}
                   className="input"
-                  placeholder="••••••••"
-                  required={loginAs === 'admin'}
-                  minLength={6}
+                  placeholder="Smith Window Cleaning"
+                  required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">What's your trade?</label>
+                <select
+                  value={businessType}
+                  onChange={e => setBusinessType(e.target.value)}
+                  className="input"
+                >
+                  {BUSINESS_TYPE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="input"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="input"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+          </div>
 
           {error && (
             <div className="p-3 rounded-lg" style={{background: '#fef2f2', color: '#dc2626', fontSize: '14px'}}>
               {error}
             </div>
           )}
+          {info && (
+            <div className="p-3 rounded-lg" style={{background: '#eff6ff', color: '#1d4ed8', fontSize: '14px'}}>
+              {info}
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading || (loginAs === 'worker' && !selectedWorker)}
-            className="btn btn-primary w-full"
-          >
-            {loading ? 'Please wait...' : loginAs === 'worker' ? 'Enter as Worker' : (isRegister ? 'Create Account' : 'Sign In')}
+          <button type="submit" disabled={loading} className="btn btn-primary w-full">
+            {loading ? 'Please wait...' : (isRegister ? 'Create Account' : 'Sign In')}
           </button>
         </form>
 
-        {loginAs === 'admin' && !INVITE_ONLY && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-sm"
-              style={{color: '#3b82f6'}}
-            >
-              {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
-          </div>
-        )}
-
-        {INVITE_ONLY && loginAs === 'admin' && (
-          <div className="mt-6 text-center text-sm text-gray-600 p-3 bg-gray-50 rounded">
-            <p>🔒 Invitation-only access</p>
-            <p className="text-xs mt-1">Contact admin@clearroute.co.uk for access</p>
-          </div>
-        )}
-
-        <div className="mt-6 p-4 rounded-lg" style={{background: '#f8fafc'}}>
-          <p className="text-xs text-gray-500 text-center mb-3">Quick Demo Login</p>
-          <div className="space-y-2">
-            <button
-              onClick={() => onLogin({ id: 'admin-1', email: 'admin@clearroute.co.uk', name: 'Admin User', is_admin: true, role: 'admin', full_name: 'Admin User' })}
-              className="btn btn-secondary w-full"
-            >
-              Continue as Admin
-            </button>
-            <button
-              onClick={() => onLogin({ id: 'manager-1', email: 'manager@clearroute.co.uk', name: 'Manager User', is_admin: true, role: 'manager', full_name: 'Manager User' })}
-              className="btn btn-secondary w-full"
-            >
-              Continue as Manager
-            </button>
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => { setMode(isRegister ? 'signin' : 'register'); setError(''); setInfo('') }}
+            className="text-sm"
+            style={{color: '#3b82f6'}}
+          >
+            {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Start your business"}
+          </button>
+          <div className="mt-4">
+            <Link to="/" className="text-xs text-gray-400 hover:text-gray-600">← Back to home</Link>
           </div>
         </div>
       </div>

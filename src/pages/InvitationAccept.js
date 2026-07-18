@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+// Accepting an invitation joins the invitee to the INVITING company. The
+// invitee has no account yet and isn't a member of the company, so RLS would
+// hide the invitation - all the work happens in the `accept-invitation` edge
+// function (service role). The :token route param is the invitation id.
 export default function InvitationAccept() {
   const { token } = useParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
-  const [invitation, setInvitation] = useState(null)
-  const [companyName, setCompanyName] = useState('')
+  const [invite, setInvite] = useState(null)
+  const [companyName, setCompanyName] = useState('the company')
+  const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -15,37 +20,22 @@ export default function InvitationAccept() {
   const [accepted, setAccepted] = useState(false)
 
   useEffect(() => {
-    loadInvitation()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
-
-  async function loadInvitation() {
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*, company_settings(*)')
-        .eq('invitation_token', token)
-        .eq('status', 'invited')
-        .single()
-
-      if (profile) {
-        setInvitation(profile)
-        
-        const { data: settings } = await supabase
-          .from('company_settings')
-          .select('company_name')
-          .limit(1)
-          .single()
-        
-        setCompanyName(settings?.company_name || 'the company')
-      } else {
-        setError('Invalid or expired invitation')
+    async function lookup() {
+      try {
+        const { data, error } = await supabase.functions.invoke('accept-invitation', {
+          body: { action: 'lookup', invitation_id: token },
+        })
+        if (error || data?.error) throw new Error(data?.error || 'Invalid or expired invitation')
+        setInvite(data)
+        setFullName(data.full_name || '')
+        setCompanyName(data.company_name || 'the company')
+      } catch (err) {
+        setError(err.message || 'Invalid or expired invitation')
       }
-    } catch (err) {
-      setError('Invalid or expired invitation')
+      setLoading(false)
     }
-    setLoading(false)
-  }
+    lookup()
+  }, [token])
 
   async function handleAccept(e) {
     e.preventDefault()
@@ -55,54 +45,30 @@ export default function InvitationAccept() {
       setError('Password must be at least 6 characters')
       return
     }
-
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
     }
 
     setAccepting(true)
-
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: invitation.email,
-        password,
-        options: {
-          data: {
-            role: invitation.role,
-            full_name: invitation.full_name
-          }
-        }
+      const { data, error } = await supabase.functions.invoke('accept-invitation', {
+        body: { action: 'accept', invitation_id: token, password, full_name: fullName },
       })
+      if (error || data?.error) throw new Error(data?.error || 'Could not accept invitation')
 
-      if (authError) throw authError
-
-      await supabase
-        .from('profiles')
-        .update({
-          status: 'active',
-          invitation_token: null,
-          id: authData.user.id
-        })
-        .eq('invitation_token', token)
-
-      await supabase
-        .from('workers')
-        .insert([{
-          name: invitation.full_name,
-          email: invitation.email,
-          role: invitation.role
-        }])
+      // Sign in as the newly-created user; CompanyProvider takes it from here.
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: data.email || invite.email,
+        password,
+      })
+      if (signInErr) throw signInErr
 
       setAccepted(true)
-
-      setTimeout(() => {
-        navigate('/')
-      }, 2000)
+      setTimeout(() => navigate('/'), 1500)
     } catch (err) {
       setError(err.message)
     }
-
     setAccepting(false)
   }
 
@@ -114,7 +80,7 @@ export default function InvitationAccept() {
     )
   }
 
-  if (error && !invitation) {
+  if (error && !invite) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)'}}>
         <div className="w-full max-w-md p-8 bg-white rounded-2xl">
@@ -124,9 +90,7 @@ export default function InvitationAccept() {
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">Invalid Invitation</h1>
             <p className="text-gray-600">{error}</p>
-            <a href="/" className="inline-block mt-6 px-6 py-3 bg-blue-500 text-white rounded-lg">
-              Go to Login
-            </a>
+            <a href="/" className="inline-block mt-6 px-6 py-3 bg-blue-500 text-white rounded-lg">Go to Login</a>
           </div>
         </div>
       </div>
@@ -165,27 +129,23 @@ export default function InvitationAccept() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Your name</label>
             <input
               type="text"
-              value={invitation?.full_name || ''}
-              disabled
-              className="input bg-gray-100"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              className="input"
+              required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Your email</label>
-            <input
-              type="email"
-              value={invitation?.email || ''}
-              disabled
-              className="input bg-gray-100"
-            />
+            <input type="email" value={invite?.email || ''} disabled className="input bg-gray-100" />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Your role</label>
             <input
               type="text"
-              value={invitation?.role === 'worker' ? 'Field Worker' : 'Manager'}
+              value={invite?.role === 'manager' ? 'Manager' : 'Field Worker'}
               disabled
               className="input bg-gray-100"
             />
@@ -217,9 +177,7 @@ export default function InvitationAccept() {
           </div>
 
           {error && (
-            <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm">
-              {error}
-            </div>
+            <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm">{error}</div>
           )}
 
           <button

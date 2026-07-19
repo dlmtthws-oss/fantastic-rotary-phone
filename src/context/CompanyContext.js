@@ -73,22 +73,36 @@ export function CompanyProvider({ children }) {
   useEffect(() => {
     let active = true
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return
-      setSession(data.session)
-      await loadProfileAndCompany(data.session)
-      if (active) setLoading(false)
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, sess) => {
+    async function handle(sess) {
       if (!active) return
       setSession(sess)
       await loadProfileAndCompany(sess)
       if (active) setLoading(false)
+    }
+
+    // Initial session. getSession() here runs outside the auth lock, so it is
+    // safe to make further Supabase calls from its continuation.
+    supabase.auth.getSession().then(({ data }) => handle(data.session))
+
+    // IMPORTANT: onAuthStateChange fires while supabase-js holds its internal
+    // auth lock. Awaiting other Supabase calls (PostgREST with an auth header,
+    // functions.invoke, which internally call getSession) *inside* this
+    // callback deadlocks the auth subsystem - which left the app stuck forever
+    // on "Loading…". So we (a) skip INITIAL_SESSION (already handled above)
+    // and (b) defer the work with setTimeout(0) so it runs after the lock is
+    // released.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (event === 'INITIAL_SESSION') return
+      setTimeout(() => handle(sess), 0)
     })
+
+    // Fail-safe: never leave the user stranded on the loading screen if the
+    // auth/profile bootstrap stalls for any reason.
+    const failSafe = setTimeout(() => { if (active) setLoading(false) }, 10000)
 
     return () => {
       active = false
+      clearTimeout(failSafe)
       sub.subscription.unsubscribe()
     }
   }, [loadProfileAndCompany])

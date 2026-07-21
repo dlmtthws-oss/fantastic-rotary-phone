@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
 const HMRC_SANDBOX_BASE_URL = 'https://test-api.service.hmrc.gov.uk'
 const HMRC_LIVE_BASE_URL = 'https://api.service.hmrc.gov.uk'
 
@@ -6,6 +8,9 @@ const HMRC_CLIENT_SECRET = Deno.env.get('HMRC_CLIENT_SECRET') || ''
 const ENVIRONMENT = Deno.env.get('VITE_HMRC_ENVIRONMENT') || 'sandbox'
 
 const BASE_URL = ENVIRONMENT === 'live' ? HMRC_LIVE_BASE_URL : HMRC_SANDBOX_BASE_URL
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL')
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 Deno.serve(async (req) => {
   try {
@@ -26,7 +31,12 @@ Deno.serve(async (req) => {
     }
 
     const state = crypto.randomUUID()
-    
+
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey)
+      await supabase.from('hmrc_oauth_state').insert({ vrn, state })
+    }
+
     const scopes = 'write:vat read:vat'
     const redirectUri = `${req.headers.get('origin') || 'http://localhost:3000'}/api/hmrc/callback`
     

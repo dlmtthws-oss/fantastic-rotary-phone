@@ -53,6 +53,9 @@ const PlanAndModules = lazy(() => import('./pages/PlanAndModules'));
 const BusinessProfile = lazy(() => import('./pages/BusinessProfile'));
 const Landing = lazy(() => import('./pages/Landing'));
 const Pricing = lazy(() => import('./pages/Pricing'));
+const SettingsIntegrations = lazy(() => import('./pages/SettingsIntegrations'));
+const XeroCallback = lazy(() => import('./pages/XeroCallback'));
+const BankFeedCallback = lazy(() => import('./pages/BankFeedCallback'));
 
 function PageLoading() {
   return (
@@ -195,6 +198,9 @@ function AppInner() {
                 <Route path="/invite" element={<RequireModule module="multi_user"><InviteUsers user={user} /></RequireModule>} />
                 <Route path="/settings/audit-log" element={<RequireModule module="audit_log"><AuditLog /></RequireModule>} />
                 <Route path="/settings/quickbooks-callback" element={<RequireModule module="quickbooks"><QuickBooksCallback /></RequireModule>} />
+                <Route path="/settings/xero-callback" element={<RequireModule module="xero"><XeroCallback /></RequireModule>} />
+                <Route path="/settings/truelayer-callback" element={<RequireModule module="open_banking"><BankFeedCallback /></RequireModule>} />
+                <Route path="/settings/integrations" element={<RequireModule module="xero"><SettingsIntegrations user={user} /></RequireModule>} />
                 <Route path="/accounting/bank-feed" element={<RequireModule module="open_banking"><BankFeed /></RequireModule>} />
                 <Route path="/reports/anomalies/dashboard" element={<RequireModule module="anomaly_detection"><RiskDashboard /></RequireModule>} />
                 <Route path="/reports/anomalies/invoices" element={<RequireModule module="anomaly_detection"><AnomalyManagement user={user} /></RequireModule>} />

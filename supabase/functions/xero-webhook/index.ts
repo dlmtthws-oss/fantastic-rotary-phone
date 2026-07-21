@@ -52,7 +52,7 @@ serve(async (req) => {
     if (events.length === 0) {
       return new Response(JSON.stringify({ received: true }), {
         headers: { ...CORSHeaders, "Content-Type": "application/json" },
-      };
+      });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

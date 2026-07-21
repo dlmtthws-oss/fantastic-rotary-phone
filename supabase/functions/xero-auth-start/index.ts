@@ -89,6 +89,9 @@ serve(async (req) => {
       is_active: false,
     }, { onConflict: "user_id" });
 
+    // Persist state so xero-auth-callback can verify it wasn't tampered with.
+    await supabase.from("xero_oauth_state").insert({ user_id: userId, state });
+
     return new Response(JSON.stringify({ authUrl: authUrl.toString(), state }), {
       headers: { ...CORSHeaders, "Content-Type": "application/json" },
     });

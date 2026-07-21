@@ -21,6 +21,11 @@ export default function Settings({ user }) {
           <h3 className="font-semibold">Plan & Modules</h3>
           <p className="text-sm text-gray-600">View your subscription plan and included features</p>
         </Link>
+        <Link to="/settings/integrations" className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+          <div className="text-2xl mb-2">🔗</div>
+          <h3 className="font-semibold">Accounting Integrations</h3>
+          <p className="text-sm text-gray-600">Connect Xero, QuickBooks or your bank account</p>
+        </Link>
       </div>
     </div>
   )

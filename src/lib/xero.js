@@ -57,13 +57,33 @@ export async function fullSyncXero(userId, entityType = 'all') {
   return data
 }
 
+const XERO_OAUTH_CONTEXT_KEY = 'xero_oauth_context'
+
 export async function startXeroAuth(userId) {
   const { data, error } = await supabase.functions.invoke('xero-auth-start', {
     body: { userId }
   })
 
   if (error) throw error
-  return data
+
+  // Xero's redirect back only carries `code` (not userId), so stash what
+  // xero-auth-callback needs here; XeroCallback.js reads it back.
+  if (data?.authUrl) {
+    localStorage.setItem(XERO_OAUTH_CONTEXT_KEY, JSON.stringify({ state: data.state, userId }))
+  }
+
+  return data?.authUrl
+}
+
+export function consumeXeroOAuthContext() {
+  const raw = localStorage.getItem(XERO_OAUTH_CONTEXT_KEY)
+  localStorage.removeItem(XERO_OAUTH_CONTEXT_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
 }
 
 export function getXeroSyncStatusBadge(invoice) {

@@ -63,14 +63,11 @@ export async function startQuickBooksAuth(userId) {
   })
 
   if (error) throw error
-  
-  if (data?.authUrl) {
-    const redirectUrl = `${window.location.origin}/settings/quickbooks-callback`
-    const encodedUserId = btoa(JSON.stringify({ userId }))
-    return `${data.authUrl}&redirect_uri=${encodeURIComponent(redirectUrl)}&state=${encodeURIComponent(encodedUserId)}`
-  }
-  
-  return data
+
+  // qbo-auth-start already builds the full authorize URL, with the
+  // server-configured redirect_uri and a state that embeds userId - return
+  // it as-is rather than layering a second, conflicting set of params on top.
+  return data?.authUrl
 }
 
 export async function getQBOAccounts(userId) {

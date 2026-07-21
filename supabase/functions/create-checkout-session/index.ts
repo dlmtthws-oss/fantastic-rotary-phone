@@ -103,6 +103,7 @@ serve(async (req) => {
     // themselves instead of bouncing to production); APP_URL is only a
     // fallback for calls that don't carry an Origin header.
     const appUrl = req.headers.get("origin") || Deno.env.get("APP_URL") || "";
+    console.log(`create-checkout-session: origin=${req.headers.get("origin")} resolvedAppUrl=${appUrl}`);
     const qty = String(Math.max(1, Number(seats) || 1));
 
     const session = await stripe("checkout/sessions", stripeKey, {

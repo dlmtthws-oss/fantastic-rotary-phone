@@ -54,7 +54,10 @@ serve(async (req) => {
       return json({ error: "No active subscription to manage" }, 400);
     }
 
-    const appUrl = Deno.env.get("APP_URL") || req.headers.get("origin") || "";
+    // Prefer the browser's own origin (so preview/QA deployments return to
+    // themselves instead of bouncing to production); APP_URL is only a
+    // fallback for calls that don't carry an Origin header.
+    const appUrl = req.headers.get("origin") || Deno.env.get("APP_URL") || "";
     const res = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
       method: "POST",
       headers: {

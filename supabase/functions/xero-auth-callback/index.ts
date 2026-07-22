@@ -12,6 +12,7 @@ const CORSHeaders = {
 interface AuthCallbackRequest {
   code: string;
   userId: string;
+  state?: string;
 }
 
 interface XeroTokenResponse {
@@ -45,13 +46,34 @@ serve(async (req) => {
       );
     }
 
-    const { code, userId } = await req.json() as AuthCallbackRequest;
+    const { code, userId, state } = await req.json() as AuthCallbackRequest;
     if (!code || !userId) {
       return new Response(
         JSON.stringify({ error: "Code and user ID required" }),
         { status: 400, headers: { ...CORSHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: storedState } = await supabase
+      .from("xero_oauth_state")
+      .select("state")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!storedState || storedState.state !== state) {
+      return new Response(
+        JSON.stringify({ error: "Invalid state parameter" }),
+        { status: 400, headers: { ...CORSHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    await supabase.from("xero_oauth_state").delete().eq("user_id", userId);
 
     const tokenUrlParams = new URLSearchParams();
     tokenUrlParams.set("grant_type", "authorization_code");
@@ -79,10 +101,6 @@ serve(async (req) => {
 
     const tokenData: XeroTokenResponse = await tokenResponse.json();
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const connectionsResponse = await fetch("https://api.xero.com/connections", {
       headers: {

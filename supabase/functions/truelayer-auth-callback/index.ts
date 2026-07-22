@@ -70,7 +70,7 @@ serve(async (req) => {
 
     const { data: storedState } = await supabase
       .from("bank_connection_tokens")
-      .select("code_verifier")
+      .select("code_verifier, auth_state")
       .eq("user_id", userId)
       .single();
 

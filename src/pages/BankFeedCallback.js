@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
-export default function QuickBooksCallback() {
+export default function BankFeedCallback() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [error, setError] = useState(null)
@@ -10,28 +10,41 @@ export default function QuickBooksCallback() {
 
   useEffect(() => {
     async function handleCallback() {
+      const providerError = searchParams.get('error')
       const code = searchParams.get('code')
-      const realmId = searchParams.get('realmId')
       const state = searchParams.get('state')
 
-      if (!code || !realmId) {
-        setError('Missing required parameters from QuickBooks')
+      if (providerError) {
+        setError('Bank connection was cancelled or declined')
+        setLoading(false)
+        return
+      }
+
+      if (!code || !state) {
+        setError('Missing required parameters from your bank')
+        setLoading(false)
+        return
+      }
+
+      // TrueLayer's redirect never carries our user id - recover it from
+      // the authenticated session instead of trusting anything client-side.
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Your session expired - please sign in and try again')
         setLoading(false)
         return
       }
 
       try {
-        // qbo-auth-callback decodes userId from `state` itself (it was
-        // embedded there by qbo-auth-start) - nothing else to pass.
-        const { data, error: callbackError } = await supabase.functions.invoke('qbo-auth-callback', {
-          body: { code, realmId, state }
+        const { data, error: callbackError } = await supabase.functions.invoke('truelayer-auth-callback', {
+          body: { code, state, userId: user.id },
         })
 
         if (callbackError) {
           console.error('Callback error:', callbackError)
           setError('Failed to complete authentication')
         } else if (data?.success) {
-          navigate('/settings/integrations', { replace: true })
+          navigate('/accounting/bank-feed', { replace: true })
         } else {
           setError(data?.error || 'Authentication failed')
         }
@@ -51,7 +64,7 @@ export default function QuickBooksCallback() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Connecting to QuickBooks...</p>
+          <p className="text-gray-600">Connecting to your bank...</p>
         </div>
       </div>
     )
@@ -64,10 +77,10 @@ export default function QuickBooksCallback() {
           <h1 className="text-xl font-bold text-red-600 mb-2">Connection Failed</h1>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => navigate('/settings/integrations')}
+            onClick={() => navigate('/accounting/bank-feed')}
             className="px-4 py-2 bg-blue-600 text-white rounded"
           >
-            Back to Settings
+            Back to Bank Feed
           </button>
         </div>
       </div>

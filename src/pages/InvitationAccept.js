@@ -145,7 +145,7 @@ export default function InvitationAccept() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Your role</label>
             <input
               type="text"
-              value={invite?.role === 'manager' ? 'Manager' : 'Field Worker'}
+              value={{ admin: 'Admin', manager: 'Manager', worker: 'Field Worker', field_worker: 'Field Worker' }[invite?.role] || 'Field Worker'}
               disabled
               className="input bg-gray-100"
             />

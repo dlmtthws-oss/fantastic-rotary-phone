@@ -37,6 +37,25 @@ Deno.serve(async (req) => {
       })
     }
 
+    const supabase = getSupabase()
+
+    const { data: storedState } = await supabase
+      .from('hmrc_oauth_state')
+      .select('state')
+      .eq('vrn', vrn)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!storedState || storedState.state !== state) {
+      return new Response(JSON.stringify({ error: 'Invalid state parameter' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    await supabase.from('hmrc_oauth_state').delete().eq('vrn', vrn)
+
     const redirectUri = `${req.headers.get('origin') || 'http://localhost:3000'}/api/hmrc/callback`
 
     const tokenUrl = new URL(`${BASE_URL}/oauth/token`)
@@ -72,8 +91,6 @@ Deno.serve(async (req) => {
     const expiresAt = new Date()
     expiresAt.setSeconds(expiresAt.getSeconds() + (tokenData.expires_in || 3600))
 
-    const supabase = getSupabase()
-    
     const { error: insertError } = await supabase
       .from('hmrc_connections')
       .upsert({

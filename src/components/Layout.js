@@ -30,6 +30,7 @@ const adminLinks = [
   ]},
   { to: '/settings', label: 'Settings', icon: '⚙️', subItems: [
     { to: '/settings', label: 'General' },
+    { to: '/settings/plan', label: 'Plan & Billing', adminOnly: true },
     { to: '/settings/audit-log', label: 'Audit Log', adminOnly: true, module: 'audit_log' }
   ]},
 ];

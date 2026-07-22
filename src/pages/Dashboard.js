@@ -756,10 +756,10 @@ export default function Dashboard({ user }) {
               <p className="text-sm text-blue-700 mb-2">
                 💡 Connect your accounting software to sync invoices automatically
               </p>
-              <Link to="/settings?tab=xero" className="text-xs text-blue-600 hover:underline mr-3">
+              <Link to="/settings/integrations" className="text-xs text-blue-600 hover:underline mr-3">
                 Connect Xero
               </Link>
-              <Link to="/settings?tab=quickbooks" className="text-xs text-blue-600 hover:underline">
+              <Link to="/settings/integrations" className="text-xs text-blue-600 hover:underline">
                 Connect QuickBooks
               </Link>
             </div>

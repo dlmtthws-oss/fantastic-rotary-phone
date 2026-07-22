@@ -145,7 +145,7 @@ export function handleSupabaseError(error, customMessage = null) {
     console.error('Supabase error:', { error, code, message });
   }
   
-  if (process.env.NODE_ENV === 'production' && process.env.VITE_SENTRY_DSN) {
+  if (process.env.NODE_ENV === 'production' && process.env.REACT_APP_SENTRY_DSN) {
     Sentry.captureException(error, {
       extra: { code, originalMessage: error.message },
     });
